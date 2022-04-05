@@ -21,36 +21,63 @@ def get_input(inp, type, amp):
 
     elif type == 'cst':
         if inp > 1: A[1] *= -1
-        x = 0*ones
-        x[2,:] = A[0]*ones[2,:]
+        x = A*ones
         dx = ones*0
 
-    elif type == 'circle':
+    elif type == 'circle' or type == 'dis-circle':
         sp = 5
         time_steps = int(2*np.pi/(dt*sp))
         t = np.arange(time_steps)*dt
+
+        if type == 'dis-circle':
+            pts = 8
+            step = int(time_steps/pts)
+            deg = np.repeat(t[np.arange(time_steps,step=step)],step)
+            time_steps = deg.shape[0]
+            t = np.arange(time_steps)*dt
+        else:
+            deg = t
+
         ones = np.ones((inp,time_steps))
+        x = np.cos(sp*deg)*A*ones
+        if inp > 1: x[1,:] = np.sin(sp*deg)*A[1]*ones[1,:]
 
-        x = np.cos(sp*t)*A*ones
-        if inp > 1: x[1,:] = np.sin(sp*t)*A[1]*ones[1,:]
-        dx = -A*sp*np.sin(sp*t)*ones
-        if inp > 1: dx[1,:] = A[1]*sp*np.cos(sp*t)*ones[1,:]
+        if type == 'dis-circle':
+            dx = ones*0
+        else:
+            dx = -A*sp*np.sin(sp*deg)*ones
+            if inp > 1: dx[1,:] = A[1]*sp*np.cos(sp*deg)*ones[1,:]
 
-    elif type == 'spiral':
+        
+
+    elif type == 'spiral' or type == 'dis-spiral':
         osp = 0.05
         csp = 3
         time_steps = int(np.pi/(2*(dt*osp)))
         t = np.arange(time_steps)*dt
+        
+        if type == 'dis-spiral':
+            pts = 100
+            step = int(time_steps/pts)
+            deg = np.repeat(t[np.arange(time_steps,step=step)],step)
+            time_steps = deg.shape[0]
+            t = np.arange(time_steps)*dt
+        else:
+            deg = t
+
         tmax = np.max(t)
-        nint = (tmax-t)/tmax
+        nint = (tmax-deg)/tmax
         ones = np.ones((inp,time_steps))
 
+        x = np.cos(csp*deg)*nint*A*ones
+        if inp > 1: x[1,:] = np.sin(csp*deg)*nint*A[1]*ones[1,:]
+        if inp > 2: x[2,:] = np.sin(osp*deg)*A[0]*ones[2,:]
 
-        x = np.cos(csp*t)*nint*A*ones
-        if inp > 1: x[1,:] = np.sin(csp*t)*nint*A[1]*ones[1,:]
-        if inp > 2: x[2,:] = np.sin(osp*t)*A[0]*ones[2,:]
-        dx = -(1/tmax)*A*np.cos(csp*t)*ones - nint*A*csp*np.sin(csp*t)
-        if inp > 1: dx[1,:] = -(1/tmax)*A[1]*np.sin(csp*t)*ones[1,:] + A[1]*csp*np.cos(csp*t)*ones[1,:]
-        if inp > 2: dx[2,:] = A[0]*osp*np.cos(osp*t)*ones[2,:]
+        if type == 'dis-spiral':
+            dx = ones*0
+        else:
+            dx = -(1/tmax)*A*np.cos(csp*deg)*ones - nint*A*csp*np.sin(csp*deg)
+            if inp > 1: dx[1,:] = -(1/tmax)*A[1]*np.sin(csp*deg)*ones[1,:] + A[1]*csp*np.cos(csp*deg)*ones[1,:]
+            if inp > 2: dx[2,:] = A[0]*osp*np.cos(osp*deg)*ones[2,:]
 
     return x, dx, t, dt, time_steps

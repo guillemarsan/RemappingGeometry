@@ -200,7 +200,10 @@ def plot_neuroscience(x, y, V, s, t, basepath):
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
-def plot_1drfs(p, r, dt, basepath):
+def plot_1drfs(p, r, dt, basepath, pad=0):
+
+    p = p[pad:]
+    r = r[:,pad:]
 
     plt.figure(figsize=(10,10))
     c = plt.rcParams['axes.prop_cycle'].by_key()['color']
@@ -218,7 +221,10 @@ def plot_1drfs(p, r, dt, basepath):
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
-def plot_1dspikebins(p, s, b, basepath):
+def plot_1dspikebins(p, s, b, basepath, pad=0):
+
+    p = p[pad:]
+    s = s[:,pad:]
 
     plt.figure(figsize=(10,10))
     n = s.shape[0]

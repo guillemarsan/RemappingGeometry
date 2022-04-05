@@ -40,4 +40,4 @@ def get_model(inp, n, out, connectivity):
     Om = -G @ D 
 
     model = ConvexSNN(lamb, F, Om, T)
-    return model, D
+    return model, D, G
