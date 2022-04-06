@@ -20,7 +20,7 @@ def get_model(inp, n, out, connectivity):
     elif connectivity == 'randae':
         D = np.random.normal(size=(out,n))
     
-    elif connectivity == 'cone-randae':
+    elif connectivity == 'bowl-randae':
         D[0,:] = np.random.normal(size=(1,n))
         if inp > 1: D[1,:] = np.random.normal(size=(1,n))
 
@@ -28,6 +28,15 @@ def get_model(inp, n, out, connectivity):
         deg = np.arange(n) * 2*np.pi / n + 1e-3
         D[0,:] = np.sin(deg)*ones[0,:]
         if inp > 1: D[1,:] = np.cos(deg)*ones[1,:]
+
+    elif connectivity == 'bowl-polyae':
+        deg = np.arange(n) * 2*np.pi / n + 1e-3
+        highdeg = np.arange(n) * np.pi /(2*n) + 1e-3
+        nint = (np.max(highdeg)-highdeg)
+        D[0,:] = nint*np.sin(deg)*ones[0,:]
+        if inp > 1: D[1,:] = nint*np.cos(deg)*ones[1,:]
+        if inp > 2:
+            D[2,:] = np.sin(highdeg)*ones[2,:]
     
     lamb = 100
     nD = np.linalg.norm(D, axis=0)
