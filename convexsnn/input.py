@@ -77,7 +77,7 @@ def get_input(inp, type, amp):
             dx = ones*0
         else:
             dx = -(1/tmax)*A*np.cos(csp*deg)*ones - nint*A*csp*np.sin(csp*deg)
-            if inp > 1: dx[1,:] = -(1/tmax)*A[1]*np.sin(csp*deg)*ones[1,:] + A[1]*csp*np.cos(csp*deg)*ones[1,:]
+            if inp > 1: dx[1,:] = -(1/tmax)*A[1]*np.sin(csp*deg)*ones[1,:] + nint*A[1]*csp*np.cos(csp*deg)*ones[1,:]
             if inp > 2: dx[2,:] = A[0]*osp*np.cos(osp*deg)*ones[2,:]
 
     return x, dx, t, dt, time_steps

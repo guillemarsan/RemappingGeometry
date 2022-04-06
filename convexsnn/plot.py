@@ -232,15 +232,18 @@ def plot_1dspikebins(p, s, b, basepath, pad=0):
     diam = np.max(p)-np.min(p)
     binsize = int(s.shape[1]/b)
     pts = np.arange(b)
-    ppts = p[pts*binsize]
+    ppts = np.expand_dims(p[pts*binsize], -1)
+
+    auxppts = np.tile(ppts,(1,p.shape[0]))
+    auxp = np.tile(p,(ppts.shape[0],1))
     
     nrows = int(np.ceil(n/3))
     for i in np.arange(n):
         plt.subplot(nrows, 3, i+1)
-        sums = np.zeros(b)
-        for j in pts:
-            sums[j] = np.sum(s[i,np.argwhere(np.abs(ppts[j]-p) < diam/b)])
-        plt.bar(ppts, sums)
+        dist = np.abs(auxppts-auxp)
+        smat = np.tile(s[i,:],(b,1))
+        sums = np.sum(smat * (dist < diam/b), axis=1)
+        plt.bar(ppts[:,0], sums)
         plt.title('Neuron %i' % i)
 
     filepath = "%s-1dspikebins.png" % basepath
@@ -308,7 +311,7 @@ def plot_2dspikebins(p, s, b, basepath, grid=True):
             consider = np.argwhere(dist < (step/2))
             sums[j] = np.sum(s[i,consider])
         if grid:
-            plt.imshow(np.reshape(sums, (ptr,ptr)), cmap='jet')
+            plt.imshow(np.reshape(sums, (ptr,ptr)), cmap='jet', interpolation='bilinear')
         else:
             plt.scatter(ppts[0,:],ppts[1,:],c=sums, cmap='jet')
         plt.title('Neuron %i' % i)
