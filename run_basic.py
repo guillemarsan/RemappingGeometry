@@ -16,13 +16,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Simulation of one point")
     parser.add_argument("--dim_input", type=int, default=3,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=6,
+    parser.add_argument("--nb_neurons", type=int, default=25,
                         help="Number of neurons")
     parser.add_argument("--dim_output", type=int, default=3,
                         help="Dimensionality of outputs")
-    parser.add_argument("--input", type=str, default='dis-circle',
+    parser.add_argument("--input", type=str, default='cst',
                         help="Type of input")
-    parser.add_argument("--model", type=str, default='cone-polyae',
+    parser.add_argument("--model", type=str, default='cirgrid-polyae',
                         help="Type of model")
     parser.add_argument("--input_amp", type=float, default=1,
                         help="Amplitude of input")
@@ -34,7 +34,7 @@ if __name__ == "__main__":
                         help="Directory to dump output")
     parser.add_argument("--plot", action='store_true', default=True,
                         help="Plot the results")
-    parser.add_argument("--gif", action='store_true', default=True,
+    parser.add_argument("--gif", action='store_true', default=False,
                         help="Generate a gif of the bbox")
     
     args = parser.parse_args()
@@ -46,7 +46,11 @@ if __name__ == "__main__":
     results = dict(datetime=timestr, basepath=basepath, args=vars(args))
 
     inp = args.dim_input
-    n = args.nb_neurons
+    if args.model == 'grid-polyae': 
+        sqrtn = int(np.sqrt(args.nb_neurons))
+        n = sqrtn**2
+    else:
+        n = args.nb_neurons
     out = args.dim_output
 
     model, D, G = get_model(inp,n,out,connectivity=args.model)
@@ -106,7 +110,7 @@ if __name__ == "__main__":
         if (args.input == 'spiral' or args.input == 'dis-spiral') and inp == 3:
             p = np.cos(np.arcsin(x[2,:]))*x[:2,:]
             plot.plot_2drfs(p, r, dt, basepath)
-            plot.plot_2dspikebins(p, s, 1000, basepath)
+            plot.plot_2dspikebins(p, s, 100, basepath)
 
     if args.gif and out == 2:
         print('Generating gif...')
