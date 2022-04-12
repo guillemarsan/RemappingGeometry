@@ -8,12 +8,13 @@ class ConvexSNN():
         self.T = T
         self.n = self.Om.shape[0]
 
-    def simulate(self, c, I, V0=0, dt=0.001, time_steps=100):
+    def simulate(self, c, I, V0=0, r0=0, dt=0.001, time_steps=100):
         V = np.zeros((self.n,time_steps))
         s = np.zeros((self.n,time_steps))
         r = np.zeros((self.n,time_steps))
 
         V[:,0] = V[:,0] + V0
+        r[:,0] = r[:,0] + r0
         
         Vtp = V[:,0]
         stp = s[:,0]

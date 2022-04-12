@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Simulation of one point")
     parser.add_argument("--dim_input", type=int, default=3,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=25,
+    parser.add_argument("--nb_neurons", type=int, default=16,
                         help="Number of neurons")
     parser.add_argument("--dim_output", type=int, default=3,
                         help="Dimensionality of outputs")
@@ -24,17 +24,23 @@ if __name__ == "__main__":
                         help="Type of input")
     parser.add_argument("--model", type=str, default='cirgrid-polyae',
                         help="Type of model")
-    parser.add_argument("--input_amp", type=float, default=1,
+    parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
-    parser.add_argument("--noise_amp", type=float, default=1,
+    parser.add_argument('--input_dir', nargs='+', default=[1],
+                        help="Direction of the input")
+    parser.add_argument("--noise_amp", type=float, default=1.,
                         help="Amplitude of noise")
+    parser.add_argument("--decoder_amp", type=float, default=1.,
+                        help="Amplitude of decoder matrix D")
+    parser.add_argument("--thresh_amp", type=float, default=1.,
+                        help="Amplitude of the thresholds")                    
     parser.add_argument("--seed", type=int, default=666,
                         help="Random seed")
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
     parser.add_argument("--plot", action='store_true', default=True,
                         help="Plot the results")
-    parser.add_argument("--gif", action='store_true', default=False,
+    parser.add_argument("--gif", action='store_true', default=True,
                         help="Generate a gif of the bbox")
     
     args = parser.parse_args()
@@ -53,7 +59,7 @@ if __name__ == "__main__":
         n = args.nb_neurons
     out = args.dim_output
 
-    model, D, G = get_model(inp,n,out,connectivity=args.model)
+    model, D, G = get_model(inp,n,out,connectivity=args.model, decod_amp=args.decoder_amp, thresh_amp=args.thresh_amp)
 
     # Construction of the input
     x, dx, t, dt, time_steps = get_input(inp, type=args.input, amp=args.input_amp)
@@ -65,14 +71,19 @@ if __name__ == "__main__":
 
     # Simulate/train the model
     x0 = x[:,0]
-    y0 = -b/model.lamb
+    if args.model != 'custom': 
+        r0 = np.linalg.lstsq(D,x0+b/model.lamb,rcond=None)[0]
+    else:
+        r0 = np.zeros(n)
+    
+    y0 = D @ r0 - b / model.lamb        
     V0 = model.F @ x0 - G @ y0
 
     print('Simulating model...')
-    V, s, r = model.simulate(c, I, V0=V0, dt=dt, time_steps=time_steps)
+    V, s, r = model.simulate(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
 
     # Decode y
-    y = D @ r - np.expand_dims(b / model.lamb, axis=-1)
+    y = D @ r - b[:,None] / model.lamb
 
     # Save results 
     results['y_end'] = y[:,-1].tolist()

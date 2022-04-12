@@ -2,7 +2,7 @@
 import numpy as np
 from convexsnn.ConvexSNN import ConvexSNN
 
-def get_model(inp, n, out, connectivity):
+def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1):
 
     ones = np.ones((out,n))
     D = ones
@@ -21,8 +21,7 @@ def get_model(inp, n, out, connectivity):
         D = np.random.normal(size=(out,n))
     
     elif connectivity == 'bowl-randae':
-        D[0,:] = np.random.normal(size=(1,n))
-        if inp > 1: D[1,:] = np.random.normal(size=(1,n))
+        D[:-1,:] = np.random.normal(size=(out-1,n))
 
     elif connectivity == 'cone-polyae':
         deg = np.arange(n) * 2*np.pi / n + 1e-3
@@ -64,7 +63,7 @@ def get_model(inp, n, out, connectivity):
         # lvls = int(ptr/2)
         # step = np.pi/(2*(lvls+1))
         # radi = r*np.cos((np.arange(lvls)+1)*step)
-        
+
         id = 0
         idnew = 0
         for l in np.arange(lvls):
@@ -94,6 +93,8 @@ def get_model(inp, n, out, connectivity):
         F = D.transpose()
     G = D.transpose()
     T = np.ones(n) * 1/2*(np.linalg.norm(D, axis=0)**2)
+    T = T*thresh_amp
+    D = D*decod_amp
 
     Om = -G @ D 
 
