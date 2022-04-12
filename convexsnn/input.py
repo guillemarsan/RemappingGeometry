@@ -1,7 +1,7 @@
 
 import numpy as np
 
-def get_input(inp, type, amp):
+def get_input(inp, type, amp, dir=1):
     dt = 0.0001
     time_steps = 1000
     t = np.arange(time_steps)*dt
@@ -79,5 +79,22 @@ def get_input(inp, type, amp):
             dx = -(1/tmax)*A*np.cos(csp*deg)*ones - nint*A*csp*np.sin(csp*deg)
             if inp > 1: dx[1,:] = -(1/tmax)*A[1]*np.sin(csp*deg)*ones[1,:] + nint*A[1]*csp*np.cos(csp*deg)*ones[1,:]
             if inp > 2: dx[2,:] = A[0]*osp*np.cos(osp*deg)*ones[2,:]
+
+    elif type == 'semicircle':
+        sp = 5
+        dir_vect = np.ones(inp-1)*dir/np.linalg.norm(dir)
+        time_steps = int(np.pi/(dt*sp))
+        t = np.arange(time_steps)*dt
+        ones = np.ones((inp,time_steps))
+    
+        x = np.copy(ones)
+        if inp > 1:
+            x[:-1,:] = A[0]*dir_vect[:,None]*np.cos(sp*t)*ones[:-1,:]
+            x[-1,:] = A[0]*np.sin(sp*t)*ones[-1,:]
+
+        dx = 0*ones
+        if inp > 1:
+            dx[:-1,:] = -A[0]*dir_vect[:,None]*sp*np.sin(sp*t)*ones[:-1,:]
+            dx[-1,:] = A[0]*sp*np.cos(sp*t)*ones[-1,:]
 
     return x, dx, t, dt, time_steps
