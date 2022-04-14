@@ -14,17 +14,17 @@ import convexsnn.plot as plot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=1,
+    parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=16,
+    parser.add_argument("--nb_neurons", type=int, default=37,
                         help="Number of neurons")
     parser.add_argument("--dim_bbox", type=int, default=4,
                         help="Dimensionality of outputs")
-    parser.add_argument("--model", type=str, default='bowl-randae',
+    parser.add_argument("--model", type=str, default='gengridb-polyae',
                         help="Type of model")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
-    parser.add_argument('--input_dir', nargs='+', type=float, default=[1,0],
+    parser.add_argument('--input_dir', nargs='+', type=float, default=[0, 1],
                         help="Direction of the input")
     parser.add_argument("--noise_amp", type=float, default=1.,
                         help="Amplitude of noise")
@@ -38,7 +38,7 @@ if __name__ == "__main__":
                         help="Directory to dump output")
     parser.add_argument("--plot", action='store_true', default=True,
                         help="Plot the results")
-    parser.add_argument("--gif", action='store_true', default=True,
+    parser.add_argument("--gif", action='store_true', default=False,
                         help="Generate a gif of the bbox")
     
     args = parser.parse_args()
@@ -57,11 +57,18 @@ if __name__ == "__main__":
         n = args.nb_neurons
 
     model, D, G = get_model(dbbox ,n, dbbox,connectivity=args.model, decod_amp=args.decoder_amp, thresh_amp=args.thresh_amp)
-
+    if args.dim_pcs == 1 and len(args.input_dir) != dbbox-1:
+        dir = D[:-1,int(args.input_dir[0])].tolist()
+    elif args.dim_pcs == 2 and len(args.input_dir) != 2*(dbbox-1):
+        dir = np.concatenate((D[:-1,int(args.input_dir[0])], D[:-1,int(args.input_dir[1])]))
+    else:
+        dir = args.input_dir
     # Construction of the input
     if args.dim_pcs == 1:
         input_type = 'semicircle'
-    x, dx, t, dt, time_steps = get_input(dbbox, type=input_type, amp=args.input_amp, dir=args.input_dir)
+    else:
+        input_type = 'semispiral'
+    x, dx, t, dt, time_steps = get_input(dbbox, type=input_type, amp=args.input_amp, dir=dir)
     c = model.lamb*x + dx
 
     # Construction of the noise
@@ -100,15 +107,17 @@ if __name__ == "__main__":
                 plot.plot_2dbboxproj(x[:,-1], y[:,-1:], model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
 
         if args.dim_pcs == 1:
-          
-            p = np.arctan2(x[-1,:],x[0,:])
+            
+            line = np.linalg.norm(x[:-1,:], axis=0)
+            line[np.argmin(line):] *= -1
+            p = np.arctan2(x[-1,:],line)
 
             plot.plot_1drfs(p, r, dt, basepath, pad=100)
             plot.plot_1dspikebins(p, s, 25, basepath, pad=100)
         
         if args.dim_pcs == 2:
-            # TODO
-            p = np.cos(np.arcsin(x[2,:]))*x[:2,:]
+            basis_change = np.reshape(dir,(2,-1))
+            p = basis_change @ x[:-1,:]
             plot.plot_2drfs(p, r, dt, basepath)
             plot.plot_2dspikebins(p, s, 100, basepath)
 

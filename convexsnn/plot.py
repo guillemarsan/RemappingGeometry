@@ -69,8 +69,8 @@ def plot_2dbboxproj(x, y, F, G, T, basepath, plotx = False):
     c = plt.rcParams['axes.prop_cycle'].by_key()['color']
     y1 = y[0,:]
     y2 = y[1,:]
-    lmin = np.min(y[:2,:])-1
-    lmax = np.max(y[:2,:])+1
+    lmin = np.min(y[:2,:])-3
+    lmax = np.max(y[:2,:])+3
     lim = np.linspace(lmin, lmax, 500)
     lim1, lim2 = np.meshgrid(lim,lim)
     plane_func = lambda i, pxs, pys: (F[i,:] @ x - T[i] - G[i,0] * pxs - G[i,1]*pys)/G[i,2]
@@ -174,9 +174,9 @@ def plot_neuroscience(x, y, V, s, t, basepath):
     t *= 1000
     ax1 = plt.subplot(2, 1, 1)
     for i in range(x.shape[0]):
-        ax1.plot(t,x[i,:], label='x' + str(i))
+        ax1.plot(t,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_')
     for i in range(y.shape[0]):
-        ax1.plot(t,y[i,:], label='y' + str(i))
+        ax1.plot(t,y[i,:], label='y' + str(i) if i < 16 else '_nolegend_')
     ax1.legend()
     ax1.set_ylabel('x,y(mV)')
     ax1.set_xlabel('t(ms)')
@@ -188,7 +188,7 @@ def plot_neuroscience(x, y, V, s, t, basepath):
     l = 0.3
     off = 0.1
     for i in range(V.shape[0]):
-        ax2.plot(t,V[i,:], label='V' + str(i), color=c[i%10])
+        ax2.plot(t,V[i,:], label='V' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
         ax2.vlines(t[s[i,:] == 1], maxV + (i+1)*off + i*l, maxV + (i+1)*off + (i+1)*l, color=c[i%10])
     ax2.legend()
     ax2.set_ylabel('V(mV)')
@@ -210,7 +210,7 @@ def plot_1drfs(p, r, dt, basepath, pad=0):
     filter = np.ones(m)*1/m
     for i in range(r.shape[0]):
         rf = np.convolve(r[i,:],filter, 'same')
-        plt.plot(p, rf, label='r' + str(i), color=c[i%10])
+        plt.plot(p, rf, label='r' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
     plt.legend()
     plt.ylabel('r')
     plt.xlabel('p')
@@ -235,9 +235,10 @@ def plot_1dspikebins(p, s, b, basepath, pad=0):
     auxppts = np.tile(ppts,(1,p.shape[0]))
     auxp = np.tile(p,(ppts.shape[0],1))
     
-    nrows = int(np.ceil(n/3))
+    ncols = int(np.sqrt(n))
+    nrows = int(np.ceil(n/ncols))
     for i in np.arange(n):
-        plt.subplot(nrows, 3, i+1)
+        plt.subplot(nrows, ncols, i+1)
         dist = np.abs(auxppts-auxp)
         smat = np.tile(s[i,:],(b,1))
         sums = np.sum(smat * (dist < diam/b), axis=1)

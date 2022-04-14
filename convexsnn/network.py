@@ -83,7 +83,32 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1):
             else:
                 D[2,:] = (r/2)*ones[2,:]
 
+    elif connectivity == 'gengrid-polyae' or connectivity == 'gengridb-polyae':
+        if connectivity == 'gengridb-polyae':
+            r= 4**(out-2)
+            extras = (1-r)/(1-4)
+        else: extras = 0
+        p = int(1/4**(out-2)*(n-extras))
+        step = np.pi/p
+        angle = np.arange(0+step/2,np.pi,step)
+        pts = 1/np.tan(angle)
+        pts = pts[None,:]
+        if out > 1:
+            pts = np.concatenate((pts,np.ones((1,p))),axis=0)
+            pts= pts/np.linalg.norm(pts,axis=0)
+        for _ in np.arange(out-2):
+            ptsmirr = np.copy(pts)
+            ptsmirr[-1,:] *= -1
+            pts = np.concatenate((pts, ptsmirr), axis=1)
+            sr = np.tan(np.pi/8)
+            br = np.tan(3*np.pi/8)
+            pts = np.concatenate((pts*br, pts*sr), axis=1)
+            if connectivity == 'gengridb-polyae': 
+                pts = np.concatenate((pts, np.zeros((pts.shape[0],1))),axis=1)
+            pts = np.concatenate((pts,np.ones((1,pts.shape[1]))),axis=0)
+            pts= pts/np.linalg.norm(pts,axis=0)
 
+        D = pts
 
     
     lamb = 100

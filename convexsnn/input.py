@@ -97,4 +97,28 @@ def get_input(inp, type, amp, dir=1):
             dx[:-1,:] = -A[0]*dir_vect[:,None]*sp*np.sin(sp*t)*ones[:-1,:]
             dx[-1,:] = A[0]*sp*np.cos(sp*t)*ones[-1,:]
 
+    elif type == 'semispiral':
+        osp = 0.05
+        csp = 3
+        dir_mat = np.reshape(dir,(2,-1))
+        dir_mat = dir_mat/np.linalg.norm(dir_mat, axis=1)[:,None]
+        time_steps = int(np.pi/(2*dt*osp))
+        t = np.arange(time_steps)*dt
+
+        tmax = np.max(t)
+        nint = (tmax-t)/tmax
+        ones = np.ones((inp,time_steps))
+         
+        x = np.copy(ones)
+        if inp > 1:
+            aux = (dir_mat[0,None].T*(np.cos(csp*t)*ones[:-1,:]) + dir_mat[1,None].T*(np.sin(csp*t)*ones[:-1,:]))
+            x[:-1,:] = nint*A[0]*aux
+            x[-1,:] = A[0]*np.sin(osp*t)*ones[-1,:]
+
+        dx = 0*ones
+        if inp > 1:
+            dx[:-1,:] = -(1/tmax)*A[0]*aux + nint*A[0]*(-dir_mat[0,None].T*csp*(np.sin(csp*t)*ones[:-1,:]) + 
+                                                         dir_mat[1,None].T*csp*(np.cos(csp*t)*ones[:-1,:]))
+            dx[-1,:] = A[0]*osp*np.cos(osp*t)*ones[-1,:]
+
     return x, dx, t, dt, time_steps
