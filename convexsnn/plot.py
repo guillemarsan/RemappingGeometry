@@ -177,7 +177,7 @@ def plot_neuroscience(x, y, V, s, t, basepath):
         ax1.plot(t,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_')
     for i in range(y.shape[0]):
         ax1.plot(t,y[i,:], label='y' + str(i) if i < 16 else '_nolegend_')
-    ax1.legend()
+    ax1.legend(loc='upper right')
     ax1.set_ylabel('x,y(mV)')
     ax1.set_xlabel('t(ms)')
 
@@ -190,7 +190,7 @@ def plot_neuroscience(x, y, V, s, t, basepath):
     for i in range(V.shape[0]):
         ax2.plot(t,V[i,:], label='V' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
         ax2.vlines(t[s[i,:] == 1], maxV + (i+1)*off + i*l, maxV + (i+1)*off + (i+1)*l, color=c[i%10])
-    ax2.legend()
+    ax2.legend(loc='upper right')
     ax2.set_ylabel('V(mV)')
     ax2.set_xlabel('t(ms)')
 
@@ -266,7 +266,7 @@ def plot_2drfs(p, r, dt, basepath):
     filepath = "%s-2drfsmax.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
-    fig2 = plt.figure()
+    fig2 = plt.figure(figsize=(10,10))
     ncols = int(np.sqrt(n))
     nrows = int(np.ceil(n/ncols))
     tf = 0.2
@@ -277,6 +277,7 @@ def plot_2drfs(p, r, dt, basepath):
         rf = np.convolve(r[i,:],filter,'same')
         plt.scatter(p[0,:],p[1,:],c=rf, cmap='jet',s=1)
         plt.title('Neuron %i' % i)
+        plt.gca().set_aspect('equal', adjustable='box')
 
     plt.tight_layout()
     filepath = "%s-2drfs.png" % basepath
