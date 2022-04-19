@@ -109,7 +109,9 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1):
             pts= pts/np.linalg.norm(pts,axis=0)
 
         D = pts
-
+    elif connectivity == 'load-polyae':
+        filepath = './saved_bbox/load-polyae-dim-' + str(out) + '-n-' + str(n) + '.npy'
+        D = np.load(filepath) + 1e-3
     
     lamb = 100
     nD = np.linalg.norm(D, axis=0)
