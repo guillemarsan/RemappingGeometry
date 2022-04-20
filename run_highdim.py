@@ -14,17 +14,17 @@ import convexsnn.plot as plot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=2,
+    parser.add_argument("--dim_pcs", type=int, default=1,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=37,
+    parser.add_argument("--nb_neurons", type=int, default=11,
                         help="Number of neurons")
-    parser.add_argument("--dim_bbox", type=int, default=4,
+    parser.add_argument("--dim_bbox", type=int, default=3,
                         help="Dimensionality of outputs")
-    parser.add_argument("--model", type=str, default='gengridb-polyae',
+    parser.add_argument("--model", type=str, default='load-polyae',
                         help="Type of model")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
-    parser.add_argument('--input_dir', nargs='+', type=float, default=[0, 1],
+    parser.add_argument('--input_dir', nargs='+', type=float, default=[0, 2],
                         help="Direction of the input")
     parser.add_argument("--noise_amp", type=float, default=1.,
                         help="Amplitude of noise")
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     np.random.seed(seed=args.seed)
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    name = args.model + "-pcs-" + str(args.dim_pcs) + "-bbox-" + str(args.dim_bbox)
+    name = args.model + "-pcs-" + str(args.dim_pcs) + "-bbox-" + str(args.dim_bbox) + "-n-" + str(args.nb_neurons)
     basepath = args.dir + timestr + "-" + name
     results = dict(datetime=timestr, basepath=basepath, args=vars(args))
 
@@ -85,7 +85,9 @@ if __name__ == "__main__":
     V, s, r = model.simulate(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
 
     # Decode y
-    y = D @ r - b[:,None] / model.lamb
+    decod = D @ r - b[:,None] / model.lamb
+    bias_corr = args.input_amp/(args.input_amp+0.5*(args.decoder_amp**2 - 1))
+    y = bias_corr*decod
 
     # Save results 
     results['y_end'] = y[:,-1].tolist()
@@ -97,6 +99,7 @@ if __name__ == "__main__":
 
     # Plot
     if args.plot:
+        print('Generating neuroscience plot...')
         plot.plot_neuroscience(x, y, V, s, t, basepath)
       
         if dbbox == 2 or dbbox ==3:
@@ -107,15 +110,15 @@ if __name__ == "__main__":
                 plot.plot_2dbboxproj(x[:,-1], y[:,-1:], model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
 
         if args.dim_pcs == 1:
-            
-            line = np.linalg.norm(x[:-1,:], axis=0)
-            line[np.argmin(line):] *= -1
-            p = np.arctan2(x[-1,:],line)
+            print('Generating 1drfs plot...')
+            basis_change = dir
+            p = basis_change @ x[:-1,:]
 
             plot.plot_1drfs(p, r, dt, basepath, pad=100)
             plot.plot_1dspikebins(p, s, 25, basepath, pad=100)
         
         if args.dim_pcs == 2:
+            print('Generating 2drfs plot...')
             basis_change = np.reshape(dir,(2,-1))
             p = basis_change @ x[:-1,:]
             plot.plot_2drfs(p, r, dt, basepath)
