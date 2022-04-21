@@ -14,7 +14,7 @@ import convexsnn.plot as plot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=1,
+    parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of inputs")
     parser.add_argument("--nb_neurons", type=int, default=11,
                         help="Number of neurons")
@@ -60,7 +60,10 @@ if __name__ == "__main__":
     if args.dim_pcs == 1 and len(args.input_dir) != dbbox-1:
         dir = D[:-1,int(args.input_dir[0])].tolist()
     elif args.dim_pcs == 2 and len(args.input_dir) != 2*(dbbox-1):
-        dir = np.concatenate((D[:-1,int(args.input_dir[0])], D[:-1,int(args.input_dir[1])]))
+        selneur = D[:-1,int(args.input_dir[0])]
+        dotprod = selneur @ D[:-1,:]
+        selneur2 = D[:-1,np.argmin(dotprod, axis=0)]
+        dir = np.concatenate((selneur, selneur2))
     else:
         dir = args.input_dir
     # Construction of the input
