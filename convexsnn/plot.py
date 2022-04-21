@@ -212,6 +212,7 @@ def plot_1drfs(p, r, dt, basepath, pad=0):
         rf = np.convolve(r[i,:],filter, 'same')
         plt.plot(p, rf, label='r' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
     plt.legend()
+    plt.xlim(np.min(p),np.max(p))
     plt.ylabel('r')
     plt.xlabel('p')
 
