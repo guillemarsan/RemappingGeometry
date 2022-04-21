@@ -1,4 +1,5 @@
 
+from matplotlib.pyplot import connect
 import numpy as np
 from convexsnn.ConvexSNN import ConvexSNN
 
@@ -111,7 +112,10 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1):
         D = pts
     elif connectivity == 'load-polyae':
         filepath = './saved_bbox/load-polyae-dim-' + str(out) + '-n-' + str(n) + '.npy'
-        D = np.load(filepath) + 1e-3
+        D = np.load(filepath) + 1e-5
+    elif connectivity == 'load-polyae-proj':
+        filepath = './saved_bbox/load-polyae-proj-dim-' + str(out) + '-n-' + str(n) + '.npy'
+        D = np.load(filepath) + 1e-5
     
     lamb = 100
     nD = np.linalg.norm(D, axis=0)
