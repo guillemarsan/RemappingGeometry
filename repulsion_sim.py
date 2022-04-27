@@ -17,8 +17,8 @@ def simulate_repulsion(D0,prec=1e-2):
 
 def normalize(D):
     norms = np.linalg.norm(D,axis=0)
-    normlizer = np.ones_like(norms)
-    normlizer[norms>1] = norms[norms>1]
+    # normlizer = np.ones_like(norms)
+    # normlizer[norms>1] = norms[norms>1]
     # D = D/normlizer
     
     negative = D[-1,:] < 0
@@ -32,9 +32,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Simulation of one point")
     parser.add_argument("--dimension", type=int, default=3,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=11,
+    parser.add_argument("--nb_neurons", type=int, default=9,
                         help="Number of neurons")                   
-    parser.add_argument("--seed", type=int, default=666,
+    parser.add_argument("--seed", type=int, default=0,
                         help="Random seed")
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     np.random.seed(seed=args.seed)
 
-    name = "load-polyae-dim-" + str(args.dimension) + "-n-" + str(args.nb_neurons)
+    name = "load-polyae-dim-" + str(args.dimension) + "-n-" + str(args.nb_neurons) + "-s-" + str(args.seed)
     basepath = args.dir + name
 
     d = args.dimension

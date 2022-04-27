@@ -6,10 +6,13 @@ def simulate_lloyd(D0,prec=1e-2):
     dim = D0.shape[0]
     n = D0.shape[1]
 
-    pts = np.random.normal(size=(dim,10000))
-    pts = pts[:,np.linalg.norm(pts,axis=0) < 1]
-    # plt.scatter(pts[0,:],pts[1,:])
+    print('Dropping sampling...')
+    pts = np.random.normal(size=(dim+2,10000))
+    norm = np.linalg.norm(pts,axis=0)
+    pts = pts/norm
+    pts = pts[0:dim] 
 
+    print('Lloyds algorithm...')
     Dnew = D0
     Dold = Dnew+1
     while np.linalg.norm(Dnew - Dold) > prec:
@@ -34,11 +37,11 @@ def normalize(D):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dimension", type=int, default=3,
+    parser.add_argument("--dimension", type=int, default=4,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=11,
+    parser.add_argument("--nb_neurons", type=int, default=32,
                         help="Number of neurons")                   
-    parser.add_argument("--seed", type=int, default=666,
+    parser.add_argument("--seed", type=int, default=0,
                         help="Random seed")
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
@@ -50,7 +53,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     np.random.seed(seed=args.seed)
 
-    name = "load-polyae-proj-dim-" + str(args.dimension) + "-n-" + str(args.nb_neurons)
+    name = "load-polyae-proj-dim-" + str(args.dimension) + "-n-" + str(args.nb_neurons) + "-s-" + str(args.seed)
     basepath = args.dir + name
 
     d = args.dimension

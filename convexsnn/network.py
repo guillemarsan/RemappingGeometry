@@ -3,7 +3,7 @@ from matplotlib.pyplot import connect
 import numpy as np
 from convexsnn.ConvexSNN import ConvexSNN
 
-def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1):
+def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0):
 
     ones = np.ones((out,n))
     D = ones
@@ -111,10 +111,10 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1):
 
         D = pts
     elif connectivity == 'load-polyae':
-        filepath = './saved_bbox/load-polyae-dim-' + str(out) + '-n-' + str(n) + '.npy'
+        filepath = './saved_bbox/seed' + str(load_id) + '/load-polyae-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
         D = np.load(filepath) + 1e-5
     elif connectivity == 'load-polyae-proj':
-        filepath = './saved_bbox/load-polyae-proj-dim-' + str(out) + '-n-' + str(n) + '.npy'
+        filepath = './saved_bbox/seed' + str(load_id) + '/load-polyae-proj-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
         D = np.load(filepath) + 1e-5
     
     lamb = 100
