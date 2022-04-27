@@ -220,6 +220,27 @@ def plot_1drfs(p, r, dt, basepath, pad=0):
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
+def plot_1drfsth(D, x, p, basepath, pad=0):
+
+    x = x[pad:]
+
+    plt.figure(figsize=(10,10))
+    c = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    dotprod = D.T @ x
+    for i in range(dotprod.shape[0]):
+        plt.plot(p, dotprod[i,:], label='r' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
+
+    colors = c[np.argmax(dotprod, axis=0)%10]
+    plt.scatter(p, np.ones_like(p)*np.max(dotprod)+0.05, color=colors)
+    plt.legend()
+    plt.xlim(np.min(p),np.max(p))
+    plt.ylabel('r')
+    plt.xlabel('p')
+
+    filepath = "%s-1drfsth.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+    return plt.gcf()
+
 def plot_1dspikebins(p, s, b, basepath, pad=0):
 
     p = p[pad:]
@@ -286,6 +307,25 @@ def plot_2drfs(p, r, dt, basepath):
 
     return fig1, fig2
 
+def plot_2drfsth(D, x, p, basepath):
+
+    dotprod = D.T @ x
+
+    fig1 = plt.figure(figsize=(10,10))
+    c = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    maxs = np.max(dotprod, axis=0)
+    colors = c[np.argmax(dotprod, axis=0)%10]
+    colors[maxs == 0] = 'k'
+    plt.scatter(p[0,:], p[1,:], color=colors)
+    plt.ylabel('p2')
+    plt.xlabel('p1')
+
+    filepath = "%s-2drfsthmax.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+    return fig1
+
+
 def plot_2dspikebins(p, s, b, basepath, grid=True):
 
     plt.figure(figsize=(10,10))
@@ -351,5 +391,25 @@ def plot_2dspikebinstmp(p, s, b, dt, basepath):
     plt.tight_layout()
     filepath = "%s-2dspikebins.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+def plot_errorplot(data, xaxis, title, labels, basepath):
+
+    plt.figure(figsize=(10,10))
+    for key, res in data.items():
+        
+        mean = np.mean(res, axis=1)
+        err = np.std(res, axis=1)
+        plt.errorbar(xaxis, mean, err, marker='.', capsize=3, label=key)
+
+    plt.title(title)
+    plt.xlabel(labels[0])
+    plt.ylabel(labels[1])
+    plt.ylim(0,1.1)
+    plt.legend()
+
+    plt.tight_layout()
+    filepath = "%s-pcs_perc.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
 
 
