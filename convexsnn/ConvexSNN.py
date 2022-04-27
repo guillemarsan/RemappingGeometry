@@ -24,7 +24,7 @@ class ConvexSNN():
             Vt = Vtp + self.Om @ stp
             rt = rtp + stp
 
-            Vtp = Vt + dt*(-self.lamb*Vt + self.F @ c[:,i] + I)
+            Vtp = Vt + dt*(-self.lamb*Vt + self.F @ c[:,i] + I[:,i])
             stp.fill(0)
             stp[Vtp > self.T] = 1
             rtp = rt + dt*(-self.lamb*rt)
