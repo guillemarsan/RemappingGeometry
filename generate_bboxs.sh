@@ -10,8 +10,9 @@ do
     esac
 done
 
+type="lloyds_sim.py"
 
-BIN="C:/Users/guill/Documents/MEGA/Documents/Master/S3/MT/ConvexSNNs/lloyds_sim.py"
+BIN="C:/Users/guill/Documents/MEGA/Documents/Master/S3/MT/ConvexSNNs/$type"
 RESDIR="C:/Users/guill/Documents/MEGA/Documents/Master/S3/MT/ConvexSNNs/saved_bbox/seed$seed/"
 mkdir -p $RESDIR
 
