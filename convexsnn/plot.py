@@ -62,18 +62,17 @@ def plot_1dbbox(x, y, F, G, T, basepath, plotx = False, foranim=False):
         plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
-def plot_2dbboxproj(x, y, F, G, T, basepath, plotx = False):
+def plot_2dbboxproj(F, G, T, A, basepath):
 
     plt.figure(figsize=(10,10))
     n = F.shape[0]
     c = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    y1 = y[0,:]
-    y2 = y[1,:]
-    lmin = np.min(y[:2,:])-3
-    lmax = np.max(y[:2,:])+3
+
+    lmin = -A
+    lmax = A
     lim = np.linspace(lmin, lmax, 500)
     lim1, lim2 = np.meshgrid(lim,lim)
-    plane_func = lambda i, pxs, pys: (F[i,:] @ x - T[i] - G[i,0] * pxs - G[i,1]*pys)/G[i,2]
+    plane_func = lambda i, pxs, pys: (F[i,:] @ np.zeros((F.shape[1])) - T[i] - G[i,0] * pxs - G[i,1]*pys)/G[i,2]
 
     planes = np.zeros((500,500,n))
     for i in range(n):
@@ -87,11 +86,6 @@ def plot_2dbboxproj(x, y, F, G, T, basepath, plotx = False):
     plt.ylabel('y2')
     plt.xlim(lmin,lmax)
     plt.ylim(lmin,lmax)
-
-    plt.scatter(y1,y2, c=np.arange(y.shape[1]), cmap='jet')
-    plt.scatter(y1[-1], y2[-1])
-    if plotx:
-        plt.scatter(x[0],x[1], marker='+', c='k')
 
     filepath = "%s-2dbboxproj.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
@@ -200,12 +194,12 @@ def plot_neuroscience(x, y, V, s, t, basepath):
 
 def plot_1drfs(p, r, dt, basepath, pad=0):
 
-    p = p[pad:]
+    p = p[0,pad:]
     r = r[:,pad:]
 
     plt.figure(figsize=(10,10))
     c = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    tf = 0.2
+    tf = 0.1
     m = int(tf/dt)
     filter = np.ones(m)*1/m
     for i in range(r.shape[0]):
@@ -222,7 +216,8 @@ def plot_1drfs(p, r, dt, basepath, pad=0):
 
 def plot_1drfsth(D, x, p, basepath, pad=0):
 
-    x = x[pad:]
+    p = p[0,pad:]
+    x = x[:,pad:]
 
     plt.figure(figsize=(10,10))
     c = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
@@ -243,7 +238,7 @@ def plot_1drfsth(D, x, p, basepath, pad=0):
 
 def plot_1dspikebins(p, s, b, basepath, pad=0):
 
-    p = p[pad:]
+    p = p[0,pad:]
     s = s[:,pad:]
 
     plt.figure(figsize=(10,10))

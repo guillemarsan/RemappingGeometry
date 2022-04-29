@@ -5,21 +5,21 @@ from urllib.request import DataHandler
 
 import matplotlib.pyplot as plt
 import numpy as np
+from convexsnn.Codifier import ProjectionCod
 
-from convexsnn.ConvexSNN import ConvexSNN
-from convexsnn.input import get_input
 from convexsnn.network import get_model
 from convexsnn.current import get_current
+from convexsnn.path import get_path
 import convexsnn.plot as plot
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=1,
+    parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=9,
+    parser.add_argument("--nb_neurons", type=int, default=16,
                         help="Number of neurons")
-    parser.add_argument("--dim_bbox", type=int, default=3,
+    parser.add_argument("--dim_bbox", type=int, default=8,
                         help="Dimensionality of outputs")
     parser.add_argument("--model", type=str, default='load-polyae-proj',
                         help="Type of model")
@@ -64,26 +64,29 @@ if __name__ == "__main__":
         n = args.nb_neurons
 
     model, D, G = get_model(dbbox ,n, dbbox,connectivity=args.model, decod_amp=args.decoder_amp, thresh_amp=args.thresh_amp, load_id=args.load_id)
+
+    # Construction of the path
+    if args.dim_pcs == 1:
+        path_type = 'ur'
+    else:
+        path_type = 'uspiral'
+    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type)
+
+    # Construction of the input
     if args.dim_pcs == 1 and len(args.input_dir) != dbbox-1:
-        dir = D[:-1,int(args.input_dir[0])].tolist()
+        Theta = D[:-1,int(args.input_dir[0])][:,None]
     elif args.dim_pcs == 2 and len(args.input_dir) != 2*(dbbox-1):
-        selneur = D[:-1,int(args.input_dir[0])]
-        selneur = selneur/np.linalg.norm(selneur)
-        # dotprod = selneur @ D[:-1,:]
-        # selneur2 = D[:-1,np.argmin(dotprod, axis=0)]
+        selneur = D[:-1,int(args.input_dir[0])][:,None]
         dir2 = np.zeros_like(selneur)
         dir2[-2] = 1
         dir2[-1] = -selneur[-2]/selneur[-1]
-        dir2 = dir2/np.linalg.norm(dir2)
-        dir = np.concatenate((selneur, dir2))
+        Theta = np.hstack((selneur, dir2))
     else:
-        dir = args.input_dir
-    # Construction of the input
-    if args.dim_pcs == 1:
-        input_type = 'semicircle'
-    else:
-        input_type = 'semispiral'
-    x, dx, t, dt, time_steps = get_input(dbbox, type=input_type, amp=args.input_amp, dir=dir)
+        Theta = args.input_dir.reshape((-1,args.dim_pcs))
+    Theta = Theta/np.linalg.norm(Theta,axis=0)
+
+    Codifier = ProjectionCod()
+    x, dx = Codifier.codify(p, dp, A=args.input_amp, Theta=Theta)
     c = model.lamb*x + dx
 
     # Construction of the current manipulation (noise + experiment)
@@ -132,12 +135,10 @@ if __name__ == "__main__":
             if dbbox == 2:
                 plot.plot_1dbbox(x[:,-1], y[:,-1:], model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
             else:
-                plot.plot_2dbboxproj(x[:,-1], y[:,-1:], model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
+                plot.plot_2dbboxproj(model.F, G, model.T, args.input_amp, basepath)
 
         if args.dim_pcs == 1:
             print('Generating 1drfs plot...')
-            basis_change = dir
-            p = basis_change @ x[:-1,:]
 
             plot.plot_1drfs(p, r, dt, basepath, pad=0)
             plot.plot_1dspikebins(p, s, 25, basepath, pad=0)
@@ -145,8 +146,7 @@ if __name__ == "__main__":
         
         if args.dim_pcs == 2:
             print('Generating 2drfs plot...')
-            basis_change = np.reshape(dir,(2,-1))
-            p = basis_change @ x[:-1,:]
+           
             plot.plot_2drfs(p, r, dt, basepath)
             plot.plot_2dspikebins(p, s, 100, basepath)
             plot.plot_2drfsth(D, x, p, basepath)
