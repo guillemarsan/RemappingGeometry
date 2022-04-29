@@ -11,10 +11,10 @@ class ProjectionCod():
         sqrt = np.sqrt(1 - np.linalg.norm(p, axis=0)**2)
         summ = np.sum(p * dp, axis = 0)
 
-        x[:-1,:] = Theta @ p
+        x[:-1,:] = A * Theta @ p
         x[-1,:] = A * sqrt
 
-        dx[:-1,:] = Theta @ dp
+        dx[:-1,:] = A * Theta @ dp
         dx[-1,:] = -A * summ / sqrt       
 
         return x, dx
