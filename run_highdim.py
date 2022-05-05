@@ -5,7 +5,7 @@ from urllib.request import DataHandler
 
 import matplotlib.pyplot as plt
 import numpy as np
-from convexsnn.Codifier import ProjectionCod
+from convexsnn.Codifier import ProjectionCod, Torus4DCod, TorusCod
 
 from convexsnn.network import get_model
 from convexsnn.current import get_current
@@ -17,25 +17,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Simulation of one point")
     parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=16,
+    parser.add_argument("--nb_neurons", type=int, default=8,
                         help="Number of neurons")
-    parser.add_argument("--dim_bbox", type=int, default=8,
+    parser.add_argument("--dim_bbox", type=int, default=4,
                         help="Dimensionality of outputs")
-    parser.add_argument("--model", type=str, default='load-polyae-proj',
+    parser.add_argument("--model", type=str, default='closed-load-polyae',
                         help="Type of model")
-    parser.add_argument("--load_id", type=int, default=2,
+    parser.add_argument("--load_id", type=int, default=1,
                         help="In case of load, id of the bbox to load")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
-    parser.add_argument('--input_dir', nargs='+', type=float, default=[2],
+    parser.add_argument('--input_dir', nargs='+', type=float, default=[0],
                         help="Direction of the input")
     parser.add_argument('--current_neurons', nargs='+',type=int,default=[0],
                         help="Neurons to recieve input current")
-    parser.add_argument('--current_amp', type=float, default=-1.,
+    parser.add_argument('--current_amp', type=float, default=0.,
                         help="Amplitude of the current input")
     parser.add_argument("--noise_amp", type=float, default=1.,
                         help="Amplitude of noise")
-    parser.add_argument("--decoder_amp", type=float, default=1,
+    parser.add_argument("--decoder_amp", type=float, default=0.1,
                         help="Amplitude of decoder matrix D")
     parser.add_argument("--thresh_amp", type=float, default=1,
                         help="Amplitude of the thresholds")                    
@@ -45,7 +45,7 @@ if __name__ == "__main__":
                         help="Directory to dump output")
     parser.add_argument("--plot", action='store_true', default=True,
                         help="Plot the results")
-    parser.add_argument("--gif", action='store_true', default=False,
+    parser.add_argument("--gif", action='store_true', default=True,
                         help="Generate a gif of the bbox")
     
     args = parser.parse_args()
@@ -82,15 +82,16 @@ if __name__ == "__main__":
         dir2[-1] = -selneur[-2]/selneur[-1]
         Theta = np.hstack((selneur, dir2))
     else:
-        Theta = args.input_dir.reshape((-1,args.dim_pcs))
+        Theta = np.array(args.input_dir).reshape((-1,args.dim_pcs))
     Theta = Theta/np.linalg.norm(Theta,axis=0)
 
-    Codifier = ProjectionCod()
+    Codifier = Torus4DCod()
     x, dx = Codifier.codify(p, dp, A=args.input_amp, Theta=Theta)
     c = model.lamb*x + dx
 
     # Construction of the current manipulation (noise + experiment)
     I, b = get_current(dbbox, t, G, args.noise_amp, args.current_neurons, args.current_amp)
+    #I = I - G@(model.lamb*z + dz)
 
     # Simulate/train the model
     x0 = x[:,0]
