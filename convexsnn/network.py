@@ -113,8 +113,17 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0):
     elif connectivity == 'load-polyae':
         filepath = './saved_bbox/seed' + str(load_id) + '/load-polyae-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
         D = np.load(filepath) + 1e-5
+    elif connectivity == 'doub-load-polyae':
+        filepath = './saved_bbox/seed' + str(load_id) + '/doub-load-polyae-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
+        D = np.load(filepath) + 1e-5
     elif connectivity == 'load-polyae-proj':
         filepath = './saved_bbox/seed' + str(load_id) + '/load-polyae-proj-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
+        D = np.load(filepath) + 1e-5
+    elif connectivity == 'crust-load-polyae-proj':
+        filepath = './saved_bbox/seed' + str(load_id) + '/crust-load-polyae-proj-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
+        D = np.load(filepath) + 1e-5
+    elif connectivity == 'closed-load-polyae':
+        filepath = './saved_bbox/seed' + str(load_id) + '/closed-load-polyae-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
         D = np.load(filepath) + 1e-5
     
     lamb = 100
