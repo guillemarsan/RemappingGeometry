@@ -5,8 +5,9 @@ from urllib.request import DataHandler
 
 import matplotlib.pyplot as plt
 import numpy as np
-from convexsnn.Codifier import ProjectionCod, Torus4DCod, TorusCod
+from convexsnn.Codifier import ProjectionCod, TorusCod
 
+from convexsnn.basis import get_basis
 from convexsnn.network import get_model
 from convexsnn.current import get_current
 from convexsnn.path import get_path
@@ -27,7 +28,7 @@ if __name__ == "__main__":
                         help="In case of load, id of the bbox to load")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
-    parser.add_argument('--input_dir', nargs='+', type=float, default=[0],
+    parser.add_argument('--input_dir', nargs='+', type=float, default=[2],
                         help="Direction of the input")
     parser.add_argument('--current_neurons', nargs='+',type=int,default=[0],
                         help="Neurons to recieve input current")
@@ -57,11 +58,7 @@ if __name__ == "__main__":
     results = dict(datetime=timestr, basepath=basepath, args=vars(args))
 
     dbbox = args.dim_bbox
-    if args.model == 'grid-polyae': 
-        sqrtn = int(np.sqrt(args.nb_neurons))
-        n = sqrtn**2
-    else:
-        n = args.nb_neurons
+    n = args.nb_neurons
 
     model, D, G = get_model(dbbox ,n, dbbox,connectivity=args.model, decod_amp=args.decoder_amp, thresh_amp=args.thresh_amp, load_id=args.load_id)
 
@@ -70,23 +67,19 @@ if __name__ == "__main__":
         path_type = 'ur'
     else:
         path_type = 'uspiral'
-    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type)
+    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type)   
 
     # Construction of the input
-    if args.dim_pcs == 1 and len(args.input_dir) != dbbox-1:
-        Theta = D[:-1,int(args.input_dir[0])][:,None]
-    elif args.dim_pcs == 2 and len(args.input_dir) != 2*(dbbox-1):
-        selneur = D[:-1,int(args.input_dir[0])][:,None]
-        dir2 = np.zeros_like(selneur)
-        dir2[-2] = 1
-        dir2[-1] = -selneur[-2]/selneur[-1]
-        Theta = np.hstack((selneur, dir2))
-    else:
-        Theta = np.array(args.input_dir).reshape((-1,args.dim_pcs))
-    Theta = Theta/np.linalg.norm(Theta,axis=0)
+    Codifier = TorusCod()
+    x, dx = Codifier.codify(p, dp, scale=6, type='twisted')
 
-    Codifier = Torus4DCod()
-    x, dx = Codifier.codify(p, dp, A=args.input_amp, Theta=Theta)
+    # Construction of the high dimensional embedding
+    Theta = get_basis(dbbox, dinput=x.shape[0], input_dir=args.input_dir, input_amp=args.input_amp, D=D, vect=False)
+
+    # Embedd
+    x = Theta @ x
+    dx = Theta @ dx
+
     c = model.lamb*x + dx
 
     # Construction of the current manipulation (noise + experiment)
