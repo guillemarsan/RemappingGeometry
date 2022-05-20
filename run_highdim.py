@@ -18,9 +18,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Simulation of one point")
     parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=8,
+    parser.add_argument("--nb_neurons", type=int, default=64,
                         help="Number of neurons")
-    parser.add_argument("--dim_bbox", type=int, default=4,
+    parser.add_argument("--dim_bbox", type=int, default=6,
                         help="Dimensionality of outputs")
     parser.add_argument("--model", type=str, default='closed-load-polyae',
                         help="Type of model")
@@ -28,7 +28,7 @@ if __name__ == "__main__":
                         help="In case of load, id of the bbox to load")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
-    parser.add_argument('--input_dir', nargs='+', type=float, default=[2],
+    parser.add_argument('--input_dir', nargs='+', type=float, default=[1],
                         help="Direction of the input")
     parser.add_argument('--current_neurons', nargs='+',type=int,default=[0],
                         help="Neurons to recieve input current")
@@ -44,13 +44,12 @@ if __name__ == "__main__":
                         help="Random seed")
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
-    parser.add_argument("--plot", action='store_true', default=True,
+    parser.add_argument("--plot", action='store_true', default=False,
                         help="Plot the results")
-    parser.add_argument("--gif", action='store_true', default=True,
+    parser.add_argument("--gif", action='store_true', default=False,
                         help="Generate a gif of the bbox")
     
     args = parser.parse_args()
-    np.random.seed(seed=args.seed)
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
     name = args.model + "-pcs-" + str(args.dim_pcs) + "-bbox-" + str(args.dim_bbox) + "-n-" + str(args.nb_neurons)
@@ -71,10 +70,10 @@ if __name__ == "__main__":
 
     # Construction of the input
     Codifier = TorusCod()
-    x, dx = Codifier.codify(p, dp, scale=6, type='twisted')
+    x, dx = Codifier.codify(p, dp)
 
     # Construction of the high dimensional embedding
-    Theta = get_basis(dbbox, dinput=x.shape[0], input_dir=args.input_dir, input_amp=args.input_amp, D=D, vect=False)
+    Theta = get_basis(dbbox, dinput=x.shape[0], input_dir=args.input_dir, input_amp=args.input_amp, D=D, vect='random')
 
     # Embedd
     x = Theta @ x
@@ -83,6 +82,7 @@ if __name__ == "__main__":
     c = model.lamb*x + dx
 
     # Construction of the current manipulation (noise + experiment)
+    np.random.seed(seed=args.seed)
     I, b = get_current(dbbox, t, G, args.noise_amp, args.current_neurons, args.current_amp)
     #I = I - G@(model.lamb*z + dz)
 
@@ -104,15 +104,16 @@ if __name__ == "__main__":
     results['y_end'] = y[:,-1].tolist()
     results['tracking_error'] = np.linalg.norm(y - x)
     
-    tf = 0.2
-    cutoff = 0
-    m = int(tf/dt)
-    filter = np.ones(m)*1/m
-    pcs = 0
-    for i in range(r.shape[0]):
-        rf = np.convolve(r[i,:],filter, 'same')
-        if np.max(rf) > cutoff:
-            pcs += 1
+    # tf = 0.2
+    # cutoff = 0
+    # m = int(tf/dt)
+    # filter = np.ones(m)*1/m
+    # pcs = 0
+    # for i in range(r.shape[0]):
+    #     rf = np.convolve(r[i,:],filter, 'same')
+    #     if np.max(rf) > cutoff:
+    #         pcs += 1
+    pcs = np.sum(np.any(s,axis=1))
     results['pcs_percentage'] = pcs/n
     
     filepath = "%s.json" % basepath

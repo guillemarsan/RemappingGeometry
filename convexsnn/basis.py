@@ -1,12 +1,12 @@
 
 import numpy as np
 
-def get_basis(dbbox, dinput, input_dir, input_amp, D, vect=False):
+def get_basis(dbbox, dinput, input_dir, input_amp, D, vect='neuron'):
 
     Basis = np.zeros((dbbox, dinput))
 
     # In case of a neuron specified
-    if not vect:
+    if vect == 'neuron':
         selneur = D[:-1,int(input_dir[0])]
         Basis[:-1,0] = selneur
         if dinput > 2:
@@ -21,7 +21,10 @@ def get_basis(dbbox, dinput, input_dir, input_amp, D, vect=False):
             dir3[-1] = selneur[-1]/selneur[-2]
             Basis[:-1,2] = dir3
         Basis[-1,-1] = 1
-            
+    elif vect == 'random':
+        np.random.seed(seed=int(input_dir[0]))
+        Q, _ = np.linalg.qr(np.random.randn(dbbox,dbbox))
+        Basis = Q[:,:dinput]
     else:
         Basis = np.array(input_dir).reshape((dbbox, dinput))
 
