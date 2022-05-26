@@ -268,8 +268,7 @@ def plot_1dspikebins(p, s, b, basepath, pad=0):
 
 
     
-def plot_2drfs(p, r, dt, basepath):
-    n = r.shape[0]
+def plot_2drfs(p, r, dt, basepath, n_vect):
 
     fig1 = plt.figure(figsize=(10,10))
     c = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
@@ -282,18 +281,22 @@ def plot_2drfs(p, r, dt, basepath):
 
     filepath = "%s-2drfsmax.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
+    
+    n = n_vect.shape[0]
 
     fig2 = plt.figure(figsize=(10,10))
     ncols = int(np.sqrt(n))
     nrows = int(np.ceil(n/ncols))
-    tf = 0.2
+    tf = 0.01
     m = int(tf/dt)
     filter = np.ones(m)*1/m
     for i in np.arange(n):
+        if n_vect[i] == 62:
+            a = 2
         plt.subplot(nrows, ncols, i+1)
-        rf = np.convolve(r[i,:],filter,'same')
+        rf = np.convolve(r[n_vect[i],:],filter,'same')
         plt.scatter(p[0,:],p[1,:],c=rf, cmap='jet',s=1)
-        plt.title('Neuron %i' % i)
+        plt.title('Neuron %i' % n_vect[i])
         plt.gca().set_aspect('equal', adjustable='box')
 
     plt.tight_layout()
@@ -321,10 +324,11 @@ def plot_2drfsth(D, x, p, basepath):
     return fig1
 
 
-def plot_2dspikebins(p, s, b, basepath, grid=True):
+def plot_2dspikebins(p, s, b, basepath, n_vect, grid=True):
 
     plt.figure(figsize=(10,10))
-    n = s.shape[0]
+    n = n_vect.shape[0]
+
     radius = (np.max(p)-np.min(p))/2
     step = 2*radius/np.sqrt(b)
 
@@ -349,12 +353,12 @@ def plot_2dspikebins(p, s, b, basepath, grid=True):
             else:
                 dist = np.linalg.norm(np.expand_dims(ppts[:,j],-1)-p, axis=0)
             consider = np.argwhere(dist < (step/2))
-            sums[j] = np.sum(s[i,consider])
+            sums[j] = np.sum(s[n_vect[i],consider])
         if grid:
             plt.imshow(np.reshape(sums, (ptr,ptr)), cmap='jet', interpolation='bilinear')
         else:
             plt.scatter(ppts[0,:],ppts[1,:],c=sums, cmap='jet')
-        plt.title('Neuron %i' % i)
+        plt.title('Neuron %i' % n_vect[i])
 
     plt.tight_layout()
     filepath = "%s-2dspikebins.png" % basepath
@@ -387,7 +391,7 @@ def plot_2dspikebinstmp(p, s, b, dt, basepath):
     filepath = "%s-2dspikebins.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
-def plot_errorplot(data, xaxis, title, labels, basepath):
+def plot_errorplot(data, xaxis, title, labels, basepath, ground=None):
 
     plt.figure(figsize=(10,10))
     for key, res in data.items():
@@ -396,6 +400,9 @@ def plot_errorplot(data, xaxis, title, labels, basepath):
         err = np.std(res, axis=1)
         plt.errorbar(xaxis, mean, err, marker='.', capsize=3, label=key)
 
+    if ground is not None:
+        plt.plot(ground[0,:], ground[1,:], label='analytical')
+
     plt.title(title)
     plt.xlabel(labels[0])
     plt.ylabel(labels[1])
@@ -403,7 +410,7 @@ def plot_errorplot(data, xaxis, title, labels, basepath):
     plt.legend()
 
     plt.tight_layout()
-    filepath = "%s-pcs_perc.png" % basepath
+    filepath = "%s-error_plot.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
 
