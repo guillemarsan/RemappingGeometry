@@ -125,6 +125,9 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0):
     elif connectivity == 'closed-load-polyae':
         filepath = './saved_bbox/seed' + str(load_id) + '/closed-load-polyae-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
         D = np.load(filepath) + 1e-5
+    elif connectivity == 'randclosed-load-polyae':
+        filepath = './saved_bbox/seed' + str(load_id) + '/randclosed-load-polyae-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
+        D = np.load(filepath) + 1e-5
     
     lamb = 100
     nD = np.linalg.norm(D, axis=0)
