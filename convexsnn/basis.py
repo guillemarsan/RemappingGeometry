@@ -1,5 +1,6 @@
 
 import numpy as np
+from scipy.stats import ortho_group
 
 def get_basis(dbbox, dinput, input_dir, input_amp, D, vect='neuron'):
 
@@ -23,7 +24,7 @@ def get_basis(dbbox, dinput, input_dir, input_amp, D, vect='neuron'):
         Basis[-1,-1] = 1
     elif vect == 'random':
         np.random.seed(seed=int(input_dir[0]))
-        Q, _ = np.linalg.qr(np.random.randn(dbbox,dbbox))
+        Q = ortho_group.rvs(dbbox)
         Basis = Q[:,:dinput]
     else:
         Basis = np.array(input_dir).reshape((dbbox, dinput))
