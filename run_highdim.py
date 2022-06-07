@@ -158,7 +158,7 @@ if __name__ == "__main__":
                 n_vect = np.arange(n)
            
             plot.plot_2drfs(p, r, dt, basepath, n_vect)
-            plot.plot_2dspikebins(p, s, 100, basepath, n_vect)
+            plot.plot_2dspikebins(p, s, dt, 150, basepath, n_vect)
             plot.plot_2drfsth(D, x, p, basepath)
 
     if args.gif and dbbox == 2:

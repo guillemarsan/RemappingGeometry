@@ -291,8 +291,6 @@ def plot_2drfs(p, r, dt, basepath, n_vect):
     m = int(tf/dt)
     filter = np.ones(m)*1/m
     for i in np.arange(n):
-        if n_vect[i] == 62:
-            a = 2
         plt.subplot(nrows, ncols, i+1)
         rf = np.convolve(r[n_vect[i],:],filter,'same')
         plt.scatter(p[0,:],p[1,:],c=rf, cmap='jet',s=1)
@@ -324,7 +322,7 @@ def plot_2drfsth(D, x, p, basepath):
     return fig1
 
 
-def plot_2dspikebins(p, s, b, basepath, n_vect, grid=True):
+def plot_2dspikebins(p, s, dt, b, basepath, n_vect, grid=True):
 
     plt.figure(figsize=(10,10))
     n = n_vect.shape[0]
@@ -353,12 +351,12 @@ def plot_2dspikebins(p, s, b, basepath, n_vect, grid=True):
             else:
                 dist = np.linalg.norm(np.expand_dims(ppts[:,j],-1)-p, axis=0)
             consider = np.argwhere(dist < (step/2))
-            sums[j] = np.sum(s[n_vect[i],consider])
+            sums[j] = np.sum(s[n_vect[i],consider])/(consider.size*dt) if consider.size != 0 else 0
         if grid:
             plt.imshow(np.reshape(sums, (ptr,ptr)), cmap='jet', interpolation='bilinear')
         else:
             plt.scatter(ppts[0,:],ppts[1,:],c=sums, cmap='jet')
-        plt.title('Neuron %i' % n_vect[i])
+        plt.title('N %i' % n_vect[i] + ',%.2fHz' % np.max(sums))
 
     plt.tight_layout()
     filepath = "%s-2dspikebins.png" % basepath
@@ -393,7 +391,7 @@ def plot_2dspikebinstmp(p, s, b, dt, basepath):
 
 def plot_errorplot(data, xaxis, title, labels, basepath, ground=None):
 
-    plt.figure(figsize=(10,10))
+    plt.figure(figsize=(5,5))
     for key, res in data.items():
         
         mean = np.mean(res, axis=1)
@@ -403,14 +401,15 @@ def plot_errorplot(data, xaxis, title, labels, basepath, ground=None):
     if ground is not None:
         plt.plot(ground[0,:], ground[1,:], label='analytical')
 
-    plt.title(title)
-    plt.xlabel(labels[0])
-    plt.ylabel(labels[1])
+    plt.title(title, fontsize=10)
+    plt.xlabel(labels[0], fontsize=10)
+    plt.ylabel(labels[1], fontsize=10)
     plt.ylim(0,1.1)
+    plt.tick_params(axis='both', labelsize=10)
     plt.legend()
 
     plt.tight_layout()
-    filepath = "%s-error_plot.png" % basepath
+    filepath = "%s-error_plot.svg" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
 
