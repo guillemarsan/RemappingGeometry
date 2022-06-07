@@ -10,7 +10,7 @@ do
     esac
 done
 
-type="lloyds_sim.py"
+type="random_sim.py"
 
 BIN="C:/Users/guill/Documents/MEGA/Documents/Master/S3/MT/ConvexSNNs/$type"
 RESDIR="C:/Users/guill/Documents/MEGA/Documents/Master/S3/MT/ConvexSNNs/saved_bbox/seed$seed/"
@@ -20,7 +20,7 @@ echo "Redundancy: $red"
 
 NUM_DIM=4
 
-ARGS="--seed $seed --dir $RESDIR --prec 1e-3"
+ARGS="--seed $seed --dir $RESDIR"
 
 for d in `seq 1 1 $NUM_DIM`; do
 	dim="$(python -c "print (2** ($d+1))")"

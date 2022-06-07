@@ -6,15 +6,15 @@ from convexsnn.plot import plot_errorplot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=1,
+    parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of inputs")
     parser.add_argument("--num_dimensions", type=int, default=4,
                         help="Number of dimensions")
-    parser.add_argument("--num_redundancy", type=int, default=2,
+    parser.add_argument("--num_redundancy", type=int, default=7,
                         help="Number of redundancy levels")                   
-    parser.add_argument("--num_dirs", type=int, default=0,
+    parser.add_argument("--num_dirs", type=int, default=4,
                         help="Number of input directions")
-    parser.add_argument("--num_loadid", type=int, default=0,
+    parser.add_argument("--num_loadid", type=int, default=3,
                         help="Number of bbox loadids used")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
@@ -31,7 +31,7 @@ timestr = time.strftime("%Y%m%d-%H%M%S")
 name = "pcs-" + str(args.dim_pcs)
 basepath = args.write_dir + timestr + "-" + name
 
-red_vect = 2**np.arange(args.num_redundancy)
+red_vect = 2**(np.arange(args.num_redundancy))
 dim_vect = 2**(np.arange(args.num_dimensions)+2)
 if args.num_dirs != 0:
     dir_vect = np.arange(args.num_dirs)
@@ -47,7 +47,7 @@ num_loadid = loadid_vect.shape[0]
 
 
 patt = "*.json"
-path = pathlib.Path(args.read_dir + "PCS" + str(args.dim_pcs))
+path = pathlib.Path(args.read_dir + "RandTorusPCS" + str(args.dim_pcs))
 results_files = path.rglob(patt)
 results = np.zeros((args.num_redundancy,args.num_dimensions,num_dirs, num_loadid))
 
@@ -72,7 +72,7 @@ for r in np.arange(args.num_redundancy):
     key = 'redun = ' + str(red_vect[r])
     dict[key] = results[r,:,:].reshape(args.num_dimensions, num_dirs*num_loadid)
 
-title = 'Percentage of PCs for dim_pcs = ' + str(args.dim_pcs)
+title = 'Percentage of place cells for dim_pcs = ' + str(args.dim_pcs)
 xaxis = dim_vect
-labels = ['Dimension', 'Percentage of PCs']
+labels = ['Dimension', 'Percentage of place cells']
 plot_errorplot(dict, xaxis, title, labels, basepath)
