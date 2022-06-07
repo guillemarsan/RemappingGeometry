@@ -3,6 +3,8 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
+from convexsnn.plot import plot_errorplot
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
@@ -50,6 +52,9 @@ else:
 num_loadid = loadid_vect.shape[0]
 
 
+plt.figure("f1")
+plt.figure("f2")
+plt.figure("f3")
 color_list = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 color_idx = 0
 for r in red_vect:
@@ -79,6 +84,7 @@ for r in red_vect:
         py_vect = np.array([])
         for b in np.arange(args.num_dirs):
             for c in np.arange(b):
+                # Other measures
                 # px = np.linalg.norm(np.linalg.norm(results_Theta[:,:,b,0] - results_Theta[:,:,c,0],axis=0),axis=0)/d**2
                 # div = np.sum(np.sign(results[:,b,:] + results[:,c,:]),axis=0)
                 # py = np.mean(np.linalg.norm(results[:,b,:] - results[:,c,:],axis=0)/div)
@@ -91,20 +97,56 @@ for r in red_vect:
                 px_vect = np.append(px_vect, px)
                 py_vect = np.append(py_vect,py)
         
+        plt.figure("f1")
         label = 'b,n = ' + str(d) + "," + str(n)
         plt.scatter(px_vect, py_vect, color=color_list[color_idx], label=label)
         coeffs = np.polyfit(px_vect,py_vect,1)
         samples = np.linspace(np.min(px_vect)-0.01,np.max(px_vect)+0.01,100)
         pyhat = coeffs[1] + coeffs[0]*samples
         plt.plot(samples,pyhat,color=color_list[color_idx])
+
+        
+        nbins_pcs = np.arange(0,1,0.02)
+        nbins_embedds = np.arange(-1,1,0.02)
+        npts = np.math.factorial(args.num_dirs)/(2*np.math.factorial(args.num_dirs-2))
+        hist_pcs = np.histogram(py_vect, bins=nbins_pcs)[0]/npts
+        hist_embedds = np.histogram(px_vect, bins=nbins_embedds)[0]/npts
+        plt.figure("f2")
+        plt.step(nbins_pcs[:-1], hist_pcs, color=color_list[color_idx],where="post",linewidth=1,label=label)
+        plt.figure("f3")
+        plt.step(nbins_embedds[:-1], hist_embedds, color=color_list[color_idx],where="post",linewidth=1,label=label)
+
         color_idx += 1
 
-plt.title('Relationship between distance in embeddings and place cells')
-plt.xlabel('Distance in embedding')
-plt.ylabel('Distance in place cells')
+plt.figure("f1")
+plt.title('Relationship between angle in embeddings and active cells')
+plt.xlabel('Angle in embedding')
+plt.ylabel('Angle in active cells')
 plt.ylim(bottom=0)
 plt.legend()
-
 plt.tight_layout()
 filepath = "%s-diffs.png" % basepath
 plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+plt.figure("f2")
+plt.title('Frequency of angles in pcs')
+plt.xlabel('Angle in active cells')
+plt.ylabel('Probability')
+plt.ylim([0,1])
+plt.xlim(left=0)
+plt.legend()
+plt.tight_layout()
+filepath = "%s-freq_diff_pcs.png" % basepath
+plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+plt.figure("f3")
+plt.title('Frequency of angles in embeddings')
+plt.xlabel('Angle in embeddings')
+plt.ylabel('Probability')
+plt.ylim([0,1])
+plt.xlim(left=0)
+plt.legend()
+plt.tight_layout()
+filepath = "%s-freq_diff_embdds.png" % basepath
+plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
