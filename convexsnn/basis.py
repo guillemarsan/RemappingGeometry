@@ -26,6 +26,11 @@ def get_basis(dbbox, dinput, input_dir, input_amp, D, vect='neuron'):
         np.random.seed(seed=int(input_dir[0]))
         Q = ortho_group.rvs(dbbox)
         Basis = Q[:,:dinput]
+    elif vect == 'random_variance':
+        np.random.seed(seed=int(input_dir[0]))
+        noise = np.random.normal(0, 0.25, (dbbox,dinput))
+        Q = np.eye(dbbox)
+        Basis = Q[:,:dinput] + noise
     else:
         Basis = np.array(input_dir).reshape((dbbox, dinput))
 
