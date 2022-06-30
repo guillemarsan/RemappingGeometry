@@ -389,7 +389,7 @@ def plot_2dspikebinstmp(p, s, b, dt, basepath):
     filepath = "%s-2dspikebins.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
-def plot_errorplot(data, xaxis, title, labels, basepath, ground=None):
+def plot_errorplot(data, xaxis, title, labels, basepath, ground=None, ynormalized=True):
 
     plt.figure(figsize=(5,5))
     for key, res in data.items():
@@ -404,13 +404,73 @@ def plot_errorplot(data, xaxis, title, labels, basepath, ground=None):
     plt.title(title, fontsize=10)
     plt.xlabel(labels[0], fontsize=10)
     plt.ylabel(labels[1], fontsize=10)
-    plt.ylim(0,1.1)
+    if ynormalized: plt.ylim(0,1.1)
     plt.tick_params(axis='both', labelsize=10)
     plt.legend()
 
     plt.tight_layout()
-    filepath = "%s-error_plot.svg" % basepath
+    filepath = "%s-error_plot.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
+def plot_scatterplot(data, title, labels, basepath):
 
+    color_list = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    color_idx = 0
+
+    plt.figure(figsize=(5,5))
+    for key, res in data.items():
+        px_vect = res[0,:]
+        py_vect = res[1,:]
+
+        plt.scatter(px_vect, py_vect, color=color_list[color_idx % 10], label=key)
+        coeffs = np.polyfit(px_vect,py_vect,1)
+        samples = np.linspace(np.min(px_vect)-0.01,np.max(px_vect)+0.01,100)
+        pyhat = coeffs[1] + coeffs[0]*samples
+        plt.plot(samples,pyhat,color=color_list[color_idx % 10])
+        color_idx += 1
+
+    plt.title(title, fontsize=10)
+    plt.xlabel(labels[0], fontsize=10)
+    plt.ylabel(labels[1], fontsize=10)
+    plt.tick_params(axis='both', labelsize=10)
+    plt.ylim(bottom=0)
+    plt.legend()
+
+    plt.tight_layout()
+    filepath = "%s-diffs.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+def plot_step(data, title, labels, basepath):
+
+    color_list = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    color_idx = 0
+    nbins_pcs = np.arange(0,1,0.02)
+    nbins_embedds = np.arange(-1,1,0.02)
+
+    plt.figure(figsize=(5,5))
+    for key, res in data.items():
+        px_vect = res[0,:]
+        py_vect = res[1,:]
+
+        
+        hist_pcs = np.histogram(py_vect, bins=nbins_pcs)[0]/py_vect.shape[0]
+        hist_embedds = np.histogram(px_vect, bins=nbins_embedds)[0]/px_vect.shape[0]
+        plt.figure("f2")
+        plt.step(nbins_pcs[:-1], hist_pcs, color=color_list[color_idx],where="post",linewidth=1,label=key)
+        plt.figure("f3")
+        plt.step(nbins_embedds[:-1], hist_embedds, color=color_list[color_idx],where="post",linewidth=1,label=key)
+
+        color_idx += 1
+
+    plt.title(title, fontsize=10)
+    plt.xlabel(labels[0], fontsize=10)
+    plt.ylabel(labels[1], fontsize=10)
+    plt.tick_params(axis='both', labelsize=10)
+    plt.ylim([0,1])
+    plt.xlim(left=0)
+    plt.legend()
+
+    plt.tight_layout()
+    filepath = "%s-freq_diffs.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
