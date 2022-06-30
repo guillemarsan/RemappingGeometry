@@ -1,9 +1,9 @@
 import argparse
 import time
 import json
-from urllib.request import DataHandler
+import string
+import random
 
-import matplotlib.pyplot as plt
 import numpy as np
 from convexsnn.Codifier import ProjectionCod, TorusCod
 
@@ -18,27 +18,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Simulation of one point")
     parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=2048,
+    parser.add_argument("--nb_neurons", type=int, default=256,
                         help="Number of neurons")
-    parser.add_argument("--dim_bbox", type=int, default=32,
+    parser.add_argument("--dim_bbox", type=int, default=4,
                         help="Dimensionality of outputs")
-    parser.add_argument("--model", type=str, default='randclosed-load-polyae',
-                        help="Type of model")
+    parser.add_argument("--model", type=str, default='closed-load-polyae',
+                        help="Type of model")   
     parser.add_argument("--load_id", type=int, default=1,
                         help="In case of load, id of the bbox to load")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
     parser.add_argument('--input_dir', nargs='+', type=float, default=[2],
                         help="Direction of the input")
-    parser.add_argument('--current_neurons', nargs='+',type=int,default=[0],
+    parser.add_argument('--current_neurons', nargs='+',type=float,default=[0.1],
                         help="Neurons to recieve input current")
     parser.add_argument('--current_amp', type=float, default=0.,
                         help="Amplitude of the current input")
     parser.add_argument("--noise_amp", type=float, default=1.,
                         help="Amplitude of noise")
-    parser.add_argument("--decoder_amp", type=float, default=0.1,
+    parser.add_argument("--decoder_amp", type=float, default=0.25,
                         help="Amplitude of decoder matrix D")
-    parser.add_argument("--thresh_amp", type=float, default=1,
+    parser.add_argument("--thresh_amp", type=float, default=1.25,
                         help="Amplitude of the thresholds")                    
     parser.add_argument("--seed", type=int, default=666,
                         help="Random seed")
@@ -48,12 +48,16 @@ if __name__ == "__main__":
                         help="Plot the results")
     parser.add_argument("--gif", action='store_true', default=False,
                         help="Generate a gif of the bbox")
+    parser.add_argument("--save", action='store_true', default=False,
+                        help="Save V, s, r and Th matrices")
+
     
     args = parser.parse_args()
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    name = args.model + "-pcs-" + str(args.dim_pcs) + "-bbox-" + str(args.dim_bbox) + "-n-" + str(args.nb_neurons)
-    basepath = args.dir + timestr + "-" + name
+    code = ''.join(random.choice(string.ascii_letters) for i in range(5))
+    name = timestr + "-" + code + "-" + args.model + "-pcs-" + str(args.dim_pcs) + "-bbox-" + str(args.dim_bbox) + "-n-" + str(args.nb_neurons)
+    basepath = args.dir + name
     results = dict(datetime=timestr, basepath=basepath, args=vars(args))
 
     dbbox = args.dim_bbox
@@ -86,7 +90,7 @@ if __name__ == "__main__":
 
     # Construction of the current manipulation (noise + experiment)
     np.random.seed(seed=args.seed)
-    I, b = get_current(dbbox, t, G, args.noise_amp, args.current_neurons, args.current_amp)
+    I, b = get_current(dbbox, t, G, args.noise_amp, args.current_neurons, args.current_amp, vect='neuron')
     #I = I - G@(model.lamb*z + dz)
 
     # Simulate/train the model
@@ -107,23 +111,36 @@ if __name__ == "__main__":
     print('Saving results...')
     results['y_end'] = y[:,-1].tolist()
     results['tracking_error'] = np.linalg.norm(y - x)
-    
-    # tf = 0.2
-    # cutoff = 0
-    # m = int(tf/dt)
-    # filter = np.ones(m)*1/m
-    # pcs = 0
-    # for i in range(r.shape[0]):
-    #     rf = np.convolve(r[i,:],filter, 'same')
-    #     if np.max(rf) > cutoff:
-    #         pcs += 1
+
+    # PCs
     active_list = np.any(s,axis=1)
     pcs_list = np.where(active_list)[0]
     npcs = pcs_list.shape[0]
 
-    results['pcs_percentage'] = npcs/n
-    results['pcs'] = pcs_list.tolist()
-    results['basis'] = Theta.tolist()
+    # FRs
+    ft = 1
+    m = int(ft/dt)
+    filter = np.ones(m)
+    fr = np.apply_along_axis(lambda m: np.convolve(m, filter, mode='same'), axis=1, arr=s)
+    maxfr = np.max(fr[active_list,:], axis=1)
+    if np.max(maxfr) <= ft/1e-3:
+        print('1 spike/ 1 ms asserted')
+    meanfr = np.mean(fr[active_list,:], axis=1)
+
+    results['perpcs'] = npcs/n
+    results['pcsidx'] = pcs_list.tolist()
+    results['maxfr'] = maxfr.tolist()
+    results['meanfr'] = meanfr.tolist()
+
+    if args.save:
+        np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
+        results['Th'] = "%s-Th.csv" % name
+        # np.savetxt("%s-V.csv" % basepath, V)
+        # results['V'] = "%s-V.csv" % name
+        np.savetxt("%s-s.csv" % basepath, s, fmt='%i')
+        results['s'] = "%s-s.csv" % name
+        # np.savetxt("%s-r.csv" % basepath, r)
+        # results['r'] = "%s-r.csv" % name
     
     filepath = "%s.json" % basepath
     with open(filepath, "w") as file_handle:
