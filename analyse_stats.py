@@ -55,6 +55,9 @@ def load_data(dim_vect, red_vect, dir_vect, loadid_vect, func):
 def read_perpcs(path,f):
     return f['perpcs']
 
+def read_npcs(path,f):
+    return f['perpcs']*f['args']['nb_neurons']
+
 def read_activepcs(path,f):
     return f['pcsidx']
 
@@ -79,7 +82,7 @@ def read_spikebins(path,f):
 
 ##################### ANALYSE RESULTS ###################################
 
-def analyse_perpcs(dict, red_vect, results):
+def analyse_simple(dict, red_vect, results):
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
         dict[key] = results[red_idx,:,:,:].reshape(num_dims, num_dirs*num_loadid).astype('float64')
@@ -217,6 +220,16 @@ def analyse_meansize(dict, results):
 
     return dict
 
+def analyse_reparea(dict, results):
+    b = 100
+    for red_idx, red in enumerate(red_vect):
+        key = 'redun = ' + str(red)
+        reparealambda = lambda l: np.sum(np.any(np.array(l),axis=0))/b
+        resultsp = np.vectorize(reparealambda)(results[red_idx,:,:,:])
+        dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
+
+    return dict
+
 
 
 if __name__ == "__main__":
@@ -234,20 +247,20 @@ if __name__ == "__main__":
                         help="Number of bbox loadids used")
     parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[16, 32, 64],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[1,2,4,8],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
     parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
                         help="LoadID of the bbox vector")
-    parser.add_argument("--read_dir", type=str, default='./data/DBTorusPCS',
+    parser.add_argument("--read_dir", type=str, default='./data/RegularTorusPCS',
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./out/',
                         help="Directory to dump output")
 
     args = parser.parse_args()
 
-compute = 'maxsize'
+compute = 'reparea'
 
 timestr = time.strftime("%Y%m%d-%H%M%S")
 name = "pcs-" + str(args.dim_pcs)
@@ -265,6 +278,8 @@ num_loadid = loadid_vect.shape[0]
 
 if compute == 'perpcs':
     load_func = lambda path, f: read_perpcs(path, f)
+elif compute == 'npcs':
+    load_func = lambda path, f: read_npcs(path,f)
 elif compute == 'nrooms':
     load_func = lambda path, f: read_activepcs(path, f)
 elif compute == 'diffs':
@@ -275,9 +290,7 @@ elif compute == 'meanfr':
     load_func = lambda path, f: read_meanfr(path,f)
 elif compute == 'spikebins':
     load_func = lambda path, f: read_spikes(path,f)
-elif compute == 'maxsize':
-    load_func = lambda path, f: read_spikebins(path,f)
-elif compute == 'meansize':
+elif compute in {'maxsize', 'meansize', 'reparea'}:
     load_func = lambda path, f: read_spikebins(path,f)
 
 print("Loading data...")
@@ -300,9 +313,9 @@ else:
 
 print ("Analysing data...")
 dict_save = False
-if compute == 'perpcs':
+if compute in {'perpcs', 'npcs'}:
     if no_load: dict['xaxis'] = dim_vect
-    dict = analyse_perpcs(dict, red_vect, results)
+    dict = analyse_simple(dict, red_vect, results)
     dict_save = True
 
 elif compute == 'nrooms':
@@ -335,6 +348,11 @@ elif compute == 'maxsize':
 elif compute == 'meansize':
     if no_load: dict['xaxis'] = dim_vect
     dict = analyse_meansize(dict, results)
+    dict_save = True
+
+elif compute == 'reparea':
+    if no_load: dict['xaxis'] = dim_vect
+    dict = analyse_reparea(dict, results)
     dict_save = True
 
 if dict_save:
