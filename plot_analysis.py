@@ -22,20 +22,20 @@ if __name__ == "__main__":
                         help="Number of bbox loadids used")
     parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[16,32,64],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[1,2,4,8],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
     parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
                         help="LoadID of the bbox vector")
-    parser.add_argument("--read_dir", type=str, default='./data/DBTorusPCS',
+    parser.add_argument("--read_dir", type=str, default='./data/RegularTorusPCS',
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./out/',
                         help="Directory to dump output")
 
     args = parser.parse_args()
 
-plot = 'meansize'
+plot = 'reparea'
 
 dim_vect = 2**(np.arange(args.num_dims)+2) if args.num_dims != 0 else np.array(args.dim_vect)
 num_dims = dim_vect.shape[0]
@@ -60,8 +60,8 @@ file_name = str(file)
 with open(file_name, 'rb') as f:
     dict = pickle.load(f)
 
-print ("Plotting results...")
-if plot == 'perpcs':
+# Filtering results to plot
+if plot in {'perpcs', 'npcs', 'maxfr', 'meanfr', 'maxsize', 'meansize', 'reparea'}:
 
     allowed_keys = []
     for red in red_vect:
@@ -70,6 +70,22 @@ if plot == 'perpcs':
     for key, value in dict.items():
         if key in allowed_keys:
             dict2[key] = value
+
+elif plot in {'nrooms', 'diffs'}:
+
+    allowed_keys = []
+    for red in red_vect:
+        for dim in dim_vect:
+            neu = red*dim
+            allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
+    dict2 = {}
+    for key, value in dict.items():
+        if key in allowed_keys:
+            dict2[key] = value
+
+# Plotting
+print ("Plotting results...")
+if plot == 'perpcs':
 
     title = 'Percentage of place cells for PCs in ' + str(args.dim_pcs) + 'D'
     xaxis = dict['xaxis']
@@ -77,18 +93,16 @@ if plot == 'perpcs':
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath)
 
+if plot == 'npcs':
+
+    title = 'Number of place cells'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Number of place cells'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
 elif plot == 'nrooms':
 
-    allowed_keys = []
-    for red in red_vect:
-        for dim in dim_vect:
-            neu = red*dim
-            allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
-    
     title = 'Percentage of neurons active in n rooms'
     xaxis = dict['xaxis']
     labels = ['Number of rooms', 'Percentage of PCs']
@@ -96,16 +110,6 @@ elif plot == 'nrooms':
     plot_errorplot(dict2, xaxis, title, labels, basepath)
 
 elif plot == 'diffs':
-
-    allowed_keys = []
-    for red in red_vect:
-        for dim in dim_vect:
-            neu = red*dim
-            allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
     
     title = 'Relationship between angle in embeddings and active cells'
     labels = ['Angle in embedding', 'Angle in active cells']
@@ -113,14 +117,6 @@ elif plot == 'diffs':
     plot_scatterplot(dict2, title, labels, basepath)
 
 elif plot == 'maxfr':
-
-    allowed_keys = []
-    for red in red_vect:
-        allowed_keys.append("redun = " + str(red))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
 
     title = 'Maximum firing rate'
     xaxis = dict['xaxis']
@@ -130,14 +126,6 @@ elif plot == 'maxfr':
 
 elif plot == 'meanfr':
 
-    allowed_keys = []
-    for red in red_vect:
-        allowed_keys.append("redun = " + str(red))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
-
     title = 'Mean firing rate'
     xaxis = dict['xaxis']
     labels = ['Dimension', 'Mean FR'] 
@@ -145,14 +133,6 @@ elif plot == 'meanfr':
     plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
 
 elif plot == 'maxsize':
-
-    allowed_keys = []
-    for red in red_vect:
-        allowed_keys.append("redun = " + str(red))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
 
     title = 'Maximum place field size'
     xaxis = dict['xaxis']
@@ -162,16 +142,16 @@ elif plot == 'maxsize':
 
 elif plot == 'meansize':
 
-    allowed_keys = []
-    for red in red_vect:
-        allowed_keys.append("redun = " + str(red))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
-
     title = 'Mean place field size'
     xaxis = dict['xaxis']
     labels = ['Dimension', 'Mean PF size'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'reparea':
+
+    title = 'Area represented by the place cells'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Represented area'] 
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
