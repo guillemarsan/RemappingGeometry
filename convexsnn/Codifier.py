@@ -104,6 +104,10 @@ class TorusCod():
             dx[2,:] = -np.sin(alpha[1,:] + twist*alpha[0,:])*(dalpha[1,:] + twist*dalpha[0,:])
             dx[3,:] = np.cos(alpha[1,:] + twist*alpha[0,:])*(dalpha[1,:] + twist*dalpha[0,:])
 
+            # Normalize
+            x = 1/np.sqrt(2)*x
+            dx = 1/np.sqrt(2)*dx
+
         elif type == '6D':
 
             time_steps = p.shape[1]
@@ -126,6 +130,10 @@ class TorusCod():
             dx[3,:] = np.cos(alpha[1,:] + twist1*alpha[0,:])*(dalpha[1,:] + twist1*dalpha[0,:])
             dx[4,:] = -np.sin(alpha[1,:] + twist2*alpha[0,:])*(dalpha[1,:] + twist2*dalpha[0,:])
             dx[5,:] = np.cos(alpha[1,:] + twist2*alpha[0,:])*(dalpha[1,:] + twist2*dalpha[0,:])
+
+            # Normalize
+            x = 1/np.sqrt(3)*x
+            dx = 1/np.sqrt(3)*dx
 
         return x, dx
         
