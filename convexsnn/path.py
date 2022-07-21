@@ -9,7 +9,12 @@ def get_path(dpcs, type):
     ones = np.ones((dpcs,time_steps))
     tmax = np.max(t)
 
-    if type == 'ur':
+    if type == 'constant':
+        p = 0.5*ones
+        p[0,:] = -p[0,:]
+        dp = 0*ones
+
+    elif type == 'ur':
         start = -0.95
         finish = 0.95
         v = (finish - start)/tmax
