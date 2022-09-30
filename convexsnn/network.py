@@ -136,8 +136,14 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0):
         F = D.transpose()
     G = D.transpose()
     T = np.ones(n) * 1/2*(np.linalg.norm(D, axis=0)**2)
-    T = T*thresh_amp
     D = D*decod_amp
+
+    lognormal = False
+    if lognormal:
+        np.random.seed(0)
+        T = T*(thresh_amp + 1 - np.random.lognormal(mean=0,sigma=0.2,size=T.shape))
+    else:
+        T = T*thresh_amp
 
     Om = -G @ D 
 
