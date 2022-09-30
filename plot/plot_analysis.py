@@ -22,20 +22,20 @@ if __name__ == "__main__":
                         help="Number of bbox loadids used")
     parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[1,2,4,8],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[16, 32, 64],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
     parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
                         help="LoadID of the bbox vector")
-    parser.add_argument("--read_dir", type=str, default='./data/RegularTorusPCS',
+    parser.add_argument("--read_dir", type=str, default='./data/ReportTorusPCS',
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./out/',
                         help="Directory to dump output")
 
     args = parser.parse_args()
 
-plot = 'reparea'
+plot = 'perpcs'
 
 dim_vect = 2**(np.arange(args.num_dims)+2) if args.num_dims != 0 else np.array(args.dim_vect)
 num_dims = dim_vect.shape[0]
@@ -87,9 +87,9 @@ elif plot in {'nrooms', 'diffs'}:
 print ("Plotting results...")
 if plot == 'perpcs':
 
-    title = 'Percentage of place cells for PCs in ' + str(args.dim_pcs) + 'D'
+    title = 'Percentage of place cells'
     xaxis = dict['xaxis']
-    labels = ['Dimension', 'Percentage of place cells'] 
+    labels = ['Embedding dimension', 'Percentage of place cells (%)'] 
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath)
 
@@ -144,7 +144,7 @@ elif plot == 'meansize':
 
     title = 'Mean place field size'
     xaxis = dict['xaxis']
-    labels = ['Dimension', 'Mean PF size'] 
+    labels = ['Embedding dimension', 'Mean PF size (%)'] 
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
 
@@ -154,4 +154,4 @@ elif plot == 'reparea':
     xaxis = dict['xaxis']
     labels = ['Dimension', 'Represented area'] 
     print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+    plot_errorplot(dict2, xaxis, title, labels, basepath)

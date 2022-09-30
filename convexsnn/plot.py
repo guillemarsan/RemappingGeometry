@@ -165,12 +165,12 @@ def plot_1danimbbox(x, y, F, G, T, basepath, plotx = False):
 def plot_neuroscience(x, y, V, s, t, basepath):
 
     plt.figure(figsize=(10,10))
-    t *= 1000
+    t_ms = t * 1000
     ax1 = plt.subplot(2, 1, 1)
     for i in range(x.shape[0]):
-        ax1.plot(t,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_')
+        ax1.plot(t_ms,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_')
     for i in range(y.shape[0]):
-        ax1.plot(t,y[i,:], label='y' + str(i) if i < 16 else '_nolegend_')
+        ax1.plot(t_ms,y[i,:], label='y' + str(i) if i < 16 else '_nolegend_')
     ax1.legend(loc='upper right')
     ax1.set_ylabel('x,y(mV)')
     ax1.set_xlabel('t(ms)')
@@ -182,8 +182,8 @@ def plot_neuroscience(x, y, V, s, t, basepath):
     l = 0.3
     off = 0.1
     for i in range(V.shape[0]):
-        ax2.plot(t,V[i,:], label='V' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
-        ax2.vlines(t[s[i,:] == 1], maxV + (i+1)*off + i*l, maxV + (i+1)*off + (i+1)*l, color=c[i%10])
+        ax2.plot(t_ms,V[i,:], label='V' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
+        ax2.vlines(t_ms[s[i,:] == 1], maxV + (i+1)*off + i*l, maxV + (i+1)*off + (i+1)*l, color=c[i%10])
     ax2.legend(loc='upper right')
     ax2.set_ylabel('V(mV)')
     ax2.set_xlabel('t(ms)')
@@ -322,9 +322,9 @@ def plot_2drfsth(D, x, p, basepath):
     return fig1
 
 
-def plot_2dspikebins(p, s, dt, b, basepath, n_vect, grid=True):
+def plot_2dspikebins(p, s, dt, b, basepath, n_vect, maxfr=None, grid=True):
 
-    plt.figure(figsize=(10,10))
+    plt.figure(figsize=(7,7))
     n = n_vect.shape[0]
 
     radius = (np.max(p)-np.min(p))/2
@@ -356,10 +356,16 @@ def plot_2dspikebins(p, s, dt, b, basepath, n_vect, grid=True):
             plt.imshow(np.reshape(sums, (ptr,ptr)), cmap='jet', interpolation='bilinear')
         else:
             plt.scatter(ppts[0,:],ppts[1,:],c=sums, cmap='jet')
-        plt.title('N %i' % n_vect[i] + ',%.2fHz' % np.max(sums))
+
+        plt.xticks([])
+        plt.yticks([])
+        if maxfr is not None:
+            plt.title('N %i' % n_vect[i] + ',%.2fHz' % maxfr[i], fontsize=10)
+        else:
+            plt.title('N %i' % n_vect[i], fontsize=10)
 
     plt.tight_layout()
-    filepath = "%s-2dspikebins.png" % basepath
+    filepath = "%s-2dspikebins.svg" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
 
@@ -391,7 +397,8 @@ def plot_2dspikebinstmp(p, s, b, dt, basepath):
 
 def plot_errorplot(data, xaxis, title, labels, basepath, ground=None, ynormalized=True):
 
-    plt.figure(figsize=(5,5))
+    plt.figure(figsize=(4,4))
+    ax = plt.gca()
     for key, res in data.items():
         
         mean = np.mean(res, axis=1)
@@ -406,10 +413,12 @@ def plot_errorplot(data, xaxis, title, labels, basepath, ground=None, ynormalize
     plt.ylabel(labels[1], fontsize=10)
     if ynormalized: plt.ylim(0,1.1)
     plt.tick_params(axis='both', labelsize=10)
-    plt.legend()
+    plt.legend(frameon=False, prop={'size': 10})
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
-    filepath = "%s-error_plot.png" % basepath
+    filepath = "%s-error_plot.svg" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
 def plot_scatterplot(data, title, labels, basepath):

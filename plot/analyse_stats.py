@@ -221,10 +221,10 @@ def analyse_meansize(dict, results):
     return dict
 
 def analyse_reparea(dict, results):
-    b = 100
+    b = 90
+    reparealambda = lambda l: np.sum(np.any(np.array(l),axis=0))/b
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
-        reparealambda = lambda l: np.sum(np.any(np.array(l),axis=0))/b
         resultsp = np.vectorize(reparealambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
