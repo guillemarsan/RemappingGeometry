@@ -30,13 +30,13 @@ if __name__ == "__main__":
                         help="Amplitude of input")
     parser.add_argument('--input_dir', nargs='+', type=float, default=[2],
                         help="Direction of the input")
-    parser.add_argument('--current_neurons', nargs='+',type=float,default=[0.1],
+    parser.add_argument('--current_neurons', nargs='+',type=float,default=[0],
                         help="Neurons to recieve input current")
     parser.add_argument('--current_amp', type=float, default=0.,
                         help="Amplitude of the current input")
     parser.add_argument("--noise_amp", type=float, default=1.,
                         help="Amplitude of noise")
-    parser.add_argument("--decoder_amp", type=float, default=0.25,
+    parser.add_argument("--decoder_amp", type=float, default=0.2,
                         help="Amplitude of decoder matrix D")
     parser.add_argument("--thresh_amp", type=float, default=1.25,
                         help="Amplitude of the thresholds")                    
