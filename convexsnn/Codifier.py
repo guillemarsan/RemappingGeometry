@@ -105,8 +105,8 @@ class TorusCod():
             dx[3,:] = np.cos(alpha[1,:] + twist*alpha[0,:])*(dalpha[1,:] + twist*dalpha[0,:])
 
             # Normalize
-            x = 1/np.sqrt(2)*x
-            dx = 1/np.sqrt(2)*dx
+            # x = 1/np.sqrt(2)*x
+            # dx = 1/np.sqrt(2)*dx
 
         elif type == '6D':
 
