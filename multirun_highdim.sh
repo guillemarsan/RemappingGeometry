@@ -11,8 +11,8 @@ do
 done
 
 
-BIN="C:/Users/guill/Documents/MEGA/Documents/Master/S3/MT/ConvexSNNs/run_highdim.py"
-RESDIR="C:/Users/guill/Documents/MEGA/Documents/Master/S3/MT/ConvexSNNs/data/ReportTorusPCS$pcs/"
+BIN="run_highdim.py"
+RESDIR="./data/NormalizedMiliTorusPCS$pcs/"
 mkdir -p $RESDIR
 
 echo "Place cells: $pcs"
@@ -33,7 +33,7 @@ for d in `seq 1 1 $NUM_DIM`; do
 		echo "LoadID: $li"
 		for dir in `seq 0 1 $(($NUM_DIR-1))`; do
 			echo "Dir: $dir"
-			nice python $BIN $DATARGS $ARGS --nb_neurons $n --dim_bbox $dim --input_dir $dir --load_id $li
+			nice python -m $BIN $DATARGS $ARGS --nb_neurons $n --dim_bbox $dim --input_dir $dir --load_id $li
 		done
 	done
 done

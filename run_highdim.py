@@ -7,6 +7,7 @@ import random
 import numpy as np
 from convexsnn.Codifier import ProjectionCod, TorusCod
 
+
 from convexsnn.basis import get_basis
 from convexsnn.network import get_model
 from convexsnn.current import get_current
@@ -132,13 +133,16 @@ if __name__ == "__main__":
     results['maxfr'] = maxfr.tolist()
     results['meanfr'] = meanfr.tolist()
 
+    results['nb_steps'] = p.shape[1]
+
     if args.save:
         np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
         results['Th'] = "%s-Th.csv" % name
         # np.savetxt("%s-V.csv" % basepath, V)
         # results['V'] = "%s-V.csv" % name
-        np.savetxt("%s-s.csv" % basepath, s, fmt='%i')
-        results['s'] = "%s-s.csv" % name
+        spike_times = np.argwhere(s)
+        np.savetxt("%s-stimes.csv" % basepath, spike_times, fmt='%i')
+        results['stimes'] = "%s-stimes.csv" % name
         # np.savetxt("%s-r.csv" % basepath, r)
         # results['r'] = "%s-r.csv" % name
     

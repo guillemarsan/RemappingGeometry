@@ -72,9 +72,17 @@ def read_maxfr(path,f):
 def read_meanfr(path,f):
     return f['meanfr']
 
-def read_spikes(path,f):
-    s = read_matrix(path, f, 's')
-    return (str(path), f['s'][:-6],s)
+def read_spikes(path,f,times=False):
+    if not times:
+        s = read_matrix(path, f, 's')
+        file = f['s'][:-6]
+    else:
+        stimes = read_matrix(path, f, 'stimes')
+        stimes = stimes.astype(int)
+        s = np.zeros((f['args']['nb_neurons'],f['nb_steps']))
+        s[stimes[:,0],stimes[:,1]] = 1
+        file = f['stimes'][:-11]
+    return (str(path), file, s)
 
 def read_spikebins(path,f):
     spikebins = read_matrix(path,f,'spikebins')
@@ -247,15 +255,15 @@ if __name__ == "__main__":
                         help="Number of bbox loadids used")
     parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[1,2,4,8],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
     parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
                         help="LoadID of the bbox vector")
-    parser.add_argument("--read_dir", type=str, default='./data/RegularTorusPCS',
+    parser.add_argument("--read_dir", type=str, default='./data/NormalizedMiliTorusPCS',
                         help="Directory to read files")
-    parser.add_argument("--write_dir", type=str, default='./out/',
+    parser.add_argument("--write_dir", type=str, default='./data/NormalizedMiliTorusPCS2/',
                         help="Directory to dump output")
 
     args = parser.parse_args()
@@ -289,7 +297,7 @@ elif compute == 'maxfr':
 elif compute == 'meanfr':
     load_func = lambda path, f: read_meanfr(path,f)
 elif compute == 'spikebins':
-    load_func = lambda path, f: read_spikes(path,f)
+    load_func = lambda path, f: read_spikes(path,f,times=True)
 elif compute in {'maxsize', 'meansize', 'reparea'}:
     load_func = lambda path, f: read_spikebins(path,f)
 

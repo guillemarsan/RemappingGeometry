@@ -22,20 +22,20 @@ if __name__ == "__main__":
                         help="Number of bbox loadids used")
     parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[16, 32, 64],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
     parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
                         help="LoadID of the bbox vector")
-    parser.add_argument("--read_dir", type=str, default='./data/ReportTorusPCS',
+    parser.add_argument("--read_dir", type=str, default='./data/NormalizedMiliTorusPCS',
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./out/',
                         help="Directory to dump output")
 
     args = parser.parse_args()
 
-plot = 'perpcs'
+plot = 'reparea'
 
 dim_vect = 2**(np.arange(args.num_dims)+2) if args.num_dims != 0 else np.array(args.dim_vect)
 num_dims = dim_vect.shape[0]
