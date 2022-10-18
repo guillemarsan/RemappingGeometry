@@ -19,17 +19,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Simulation of one point")
     parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of inputs")
-    parser.add_argument("--nb_neurons", type=int, default=256,
+    parser.add_argument("--nb_neurons", type=int, default=512,
                         help="Number of neurons")
-    parser.add_argument("--dim_bbox", type=int, default=4,
+    parser.add_argument("--dim_bbox", type=int, default=32,
                         help="Dimensionality of outputs")
-    parser.add_argument("--model", type=str, default='closed-load-polyae',
+    parser.add_argument("--model", type=str, default='randclosed-load-polyae',
                         help="Type of model")   
     parser.add_argument("--load_id", type=int, default=1,
                         help="In case of load, id of the bbox to load")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
-    parser.add_argument('--input_dir', nargs='+', type=float, default=[2],
+    parser.add_argument('--input_dir', nargs='+', type=float, default=[0],
                         help="Direction of the input")
     parser.add_argument('--current_neurons', nargs='+',type=float,default=[0],
                         help="Neurons to recieve input current")
@@ -45,7 +45,7 @@ if __name__ == "__main__":
                         help="Random seed")
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
-    parser.add_argument("--plot", action='store_true', default=False,
+    parser.add_argument("--plot", action='store_true', default=True,
                         help="Plot the results")
     parser.add_argument("--gif", action='store_true', default=False,
                         help="Generate a gif of the bbox")
@@ -81,7 +81,8 @@ if __name__ == "__main__":
 
     # Construction of the high dimensional embedding
     print('Embedding input...')
-    Theta = get_basis(dbbox, dinput=x.shape[0], input_dir=args.input_dir, input_amp=args.input_amp, D=D, vect='random')
+    normalization = False # \sqrtn
+    Theta = get_basis(dbbox, dinput=x.shape[0], input_dir=args.input_dir, input_amp=args.input_amp, D=D, vect='random', normalize=normalization)
 
     # Embedd
     x = Theta @ x
@@ -107,11 +108,13 @@ if __name__ == "__main__":
     decod = D @ r
     bias_corr = args.input_amp/(args.input_amp+0.5*(args.decoder_amp**2 - 1))
     y = bias_corr*decod - b / model.lamb
+    if normalization: y = n*y
 
     # Save results 
     print('Saving results...')
     results['y_end'] = y[:,-1].tolist()
-    results['tracking_error'] = np.linalg.norm(y - x)
+    results['tracking_error_norm'] = np.linalg.norm(y - x)
+    results['tracking_error_mean'] = np.mean(np.abs(y - x))
 
     # PCs
     active_list = np.any(s,axis=1)
@@ -134,6 +137,7 @@ if __name__ == "__main__":
     results['meanfr'] = meanfr.tolist()
 
     results['nb_steps'] = p.shape[1]
+    results['dt'] = dt
 
     if args.save:
         np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
@@ -179,7 +183,7 @@ if __name__ == "__main__":
                 n_vect = np.arange(n)
            
             plot.plot_2drfs(p, r, dt, basepath, n_vect)
-            plot.plot_2dspikebins(p, s, dt, 150, basepath, n_vect)
+            plot.plot_2dspikebins(p, s, dt, 500, basepath, n_vect)
             plot.plot_2drfsth(D, x, p, basepath)
 
     if args.gif and dbbox == 2:

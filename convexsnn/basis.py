@@ -2,7 +2,7 @@
 import numpy as np
 from scipy.stats import ortho_group
 
-def get_basis(dbbox, dinput, input_dir, input_amp, D, vect='neuron'):
+def get_basis(dbbox, dinput, input_dir, input_amp, D, vect='neuron', normalize=False):
 
     Basis = np.zeros((dbbox, dinput))
 
@@ -37,5 +37,7 @@ def get_basis(dbbox, dinput, input_dir, input_amp, D, vect='neuron'):
     # Scale
     Basis = Basis/np.linalg.norm(Basis,axis=0)
     Theta = input_amp*Basis
+    if normalize:
+        Theta = np.sqrt(D.shape[1])*Theta
 
     return Theta
