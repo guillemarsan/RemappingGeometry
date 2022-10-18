@@ -2,8 +2,8 @@
 import numpy as np
 
 def get_path(dpcs, type):
-    dt = 0.001
-    time_steps = 30000
+    dt = 0.0001
+    time_steps = 300000
     t = np.arange(time_steps)*dt
 
     ones = np.ones((dpcs,time_steps))
