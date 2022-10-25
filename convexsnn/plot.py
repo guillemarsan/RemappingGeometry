@@ -365,7 +365,7 @@ def plot_2dspikebins(p, s, dt, b, basepath, n_vect, maxfr=None, grid=True):
             plt.title('N %i' % n_vect[i], fontsize=10)
 
     plt.tight_layout()
-    filepath = "%s-2dspikebins.svg" % basepath
+    filepath = "%s-2dspikebins.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
 
@@ -418,25 +418,38 @@ def plot_errorplot(data, xaxis, title, labels, basepath, ground=None, ynormalize
     ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
-    filepath = "%s-error_plot.svg" % basepath
+    filepath = "%s-error_plot.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
-def plot_scatterplot(data, title, labels, basepath):
+def plot_scatterplot(data, title, labels, basepath, separated_fits=True):
 
     color_list = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
     color_idx = 0
 
+    total_px = np.array([])
+    total_py = np.array([])
     plt.figure(figsize=(5,5))
     for key, res in data.items():
         px_vect = res[0,:]
         py_vect = res[1,:]
 
         plt.scatter(px_vect, py_vect, color=color_list[color_idx % 10], label=key)
-        coeffs = np.polyfit(px_vect,py_vect,1)
+        if separated_fits:
+            coeffs = np.polyfit(px_vect,py_vect,1)
+            samples = np.linspace(np.min(px_vect)-0.01,np.max(px_vect)+0.01,100)
+            pyhat = coeffs[1] + coeffs[0]*samples
+            plt.plot(samples,pyhat,color=color_list[color_idx % 10])
+        else:
+            total_px = np.append(total_px,px_vect)
+            total_py = np.append(total_py,py_vect)
+        color_idx += 1
+    
+    if not separated_fits:
+        coeffs = np.polyfit(total_px,total_py,1)
         samples = np.linspace(np.min(px_vect)-0.01,np.max(px_vect)+0.01,100)
         pyhat = coeffs[1] + coeffs[0]*samples
         plt.plot(samples,pyhat,color=color_list[color_idx % 10])
-        color_idx += 1
+    
 
     plt.title(title, fontsize=10)
     plt.xlabel(labels[0], fontsize=10)
@@ -446,7 +459,7 @@ def plot_scatterplot(data, title, labels, basepath):
     plt.legend()
 
     plt.tight_layout()
-    filepath = "%s-diffs.png" % basepath
+    filepath = "%s-scatter.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
 def plot_step(data, title, labels, basepath):

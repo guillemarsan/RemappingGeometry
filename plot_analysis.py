@@ -32,10 +32,13 @@ if __name__ == "__main__":
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./out/',
                         help="Directory to dump output")
-
+    parser.add_argument("--plot", type=str, default='tracking_error',
+                        help = 'Which plot to make')
+    parser.add_argument('--tags', nargs='+', type=str, default=[''],
+                        help="Conditions to plot")
     args = parser.parse_args()
 
-plot = 'reparea'
+plot = args.plot
 
 dim_vect = 2**(np.arange(args.num_dims)+2) if args.num_dims != 0 else np.array(args.dim_vect)
 num_dims = dim_vect.shape[0]
@@ -45,6 +48,7 @@ dir_vect = np.arange(args.num_dirs) if args.num_dirs != 0 else np.array(args.dir
 num_dirs = dir_vect.shape[0]
 loadid_vect = np.arange(args.num_loadids) if args.num_loadids != 0 else np.array(args.loadid_vect)
 num_loadid = loadid_vect.shape[0]
+tags_vect = args.tags
 
 timestr = time.strftime("%Y%m%d-%H%M%S")
 name = "pcs-" + str(args.dim_pcs)
@@ -61,11 +65,14 @@ with open(file_name, 'rb') as f:
     dict = pickle.load(f)
 
 # Filtering results to plot
-if plot in {'perpcs', 'npcs', 'maxfr', 'meanfr', 'maxsize', 'meansize', 'reparea'}:
+if plot in {'perpcs', 'npcs', 'maxfr', 'meanfr', 'maxsize', 'meansize', 'reparea', 'meanfrcorr','spatialoverlap', 'tracking_error'}:
 
     allowed_keys = []
     for red in red_vect:
-        allowed_keys.append("redun = " + str(red))
+        for tag in tags_vect:
+            if tag != '': allowed_keys.append(tag + ", redun = " + str(red))
+            else: allowed_keys.append("redun = " + str(red))
+
     dict2 = {}
     for key, value in dict.items():
         if key in allowed_keys:
@@ -77,7 +84,24 @@ elif plot in {'nrooms', 'diffs'}:
     for red in red_vect:
         for dim in dim_vect:
             neu = red*dim
-            allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
+            for tag in tags_vect:
+                if tag != '': allowed_keys.append(tag + ', d,n = ' + str(dim) + "," + str(neu))
+                else: allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
+    dict2 = {}
+    for key, value in dict.items():
+        if key in allowed_keys:
+            dict2[key] = value
+
+elif plot in {'nrooms_pfsize', 'nrooms_meanfr'}:
+
+    allowed_keys = []
+    red = red_vect[0]
+    dim = dim_vect[0]
+    neu = red*dim
+    for loadid in loadid_vect:
+        for tag in tags_vect:
+            if tag != '': allowed_keys.append(tag + ', d,n = ' + str(dim) + "," + str(neu) + ",l = " + str(loadid))
+            else: allowed_keys.append('d,n = ' + str(dim) + "," + str(neu) + ",l = " + str(loadid))
     dict2 = {}
     for key, value in dict.items():
         if key in allowed_keys:
@@ -155,3 +179,41 @@ elif plot == 'reparea':
     labels = ['Dimension', 'Represented area'] 
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath)
+
+elif plot == 'meanfrcorr':
+
+    title = 'Mean FR correlation of place cells across environments'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Mean FR correlation (cosine of angle)'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath)
+
+elif plot == 'spatialoverlap':
+
+    title = 'Spatial overlap of place cells across environments'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Spatial overlap (cosine of angle)'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath)
+
+elif plot == 'nrooms_pfsize':
+    
+    title = 'Relationship between number of rooms and mean pf size'
+    labels = ['Number of rooms', 'Mean pf size (%)']
+    print("Plotting results...")
+    plot_scatterplot(dict2, title, labels, basepath, separated_fits = False)
+
+elif plot == 'nrooms_meanfr':
+    
+    title = 'Relationship between number of rooms and mean firing rate'
+    labels = ['Number of rooms', 'Mean FR']
+    print("Plotting results...")
+    plot_scatterplot(dict2, title, labels, basepath, separated_fits = False)
+
+elif plot == 'tracking_error':
+    
+    title = 'Tracking error'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Mean distance']
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)

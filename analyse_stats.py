@@ -67,10 +67,14 @@ def read_activepcs_th(path,f):
     return (active_list, Th)
 
 def read_maxfr(path,f):
-    return f['maxfr']
+    fr_vect = np.zeros(f['args']['nb_neurons'])
+    fr_vect[f['pcsidx']] = f['maxfr']
+    return fr_vect
 
 def read_meanfr(path,f):
-    return f['meanfr']
+    fr_vect = np.zeros(f['args']['nb_neurons'])
+    fr_vect[f['pcsidx']] = f['meanfr']
+    return fr_vect
 
 def read_spikes(path,f,times=False):
     if not times:
@@ -88,16 +92,20 @@ def read_spikebins(path,f):
     spikebins = read_matrix(path,f,'spikebins')
     return spikebins
 
+def read_tracking_error(path,f):
+    return f['tracking_error']
+
 ##################### ANALYSE RESULTS ###################################
 
-def analyse_simple(dict, red_vect, results):
+def analyse_simple(dict, red_vect, results, tag):
     for red_idx, red in enumerate(red_vect):
-        key = 'redun = ' + str(red)
+        key = 'redun = ' + str(red) 
+        if tag != '': key = tag + ', ' + key
         dict[key] = results[red_idx,:,:,:].reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
     return dict
 
-def analyse_nrooms(dict, dim_vect, red_vect, results):
+def analyse_nrooms(dict, dim_vect, red_vect, results, tag):
     nbins=np.arange(num_dirs+2)
     for red_idx, red in enumerate(red_vect):
         for dim_idx, dim  in enumerate(dim_vect):
@@ -109,10 +117,11 @@ def analyse_nrooms(dict, dim_vect, red_vect, results):
 
             hist = np.apply_along_axis(lambda a: np.histogram(a, bins=nbins)[0], 0, results_nrooms)
             key = 'd,n = ' + str(dim) + "," + str(neu)
+            if tag != '': key = tag + ', ' + key
             dict[key] = hist/neu
     return dict
 
-def analyse_diffs(dict, dim_vect, red_vect, results):
+def analyse_diffs(dict, dim_vect, red_vect, results, tag):
     for red_idx, red in enumerate(red_vect):
         for dim_idx, dim  in enumerate(dim_vect):
             neu = red*dim
@@ -146,22 +155,25 @@ def analyse_diffs(dict, dim_vect, red_vect, results):
                     j += 1
 
             key = 'd,n = ' + str(dim) + "," + str(neu)
+            if tag != '': key = tag + ', ' + key
             dict[key] = points_vect
     return dict
 
-def analyse_maxfr(dict, red_vect, results):
+def analyse_maxfr(dict, red_vect, results, tag):
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
+        if tag != '': key = tag + ', ' + key
         maxlambda = lambda l: np.max(np.array(l))
         resultsp = np.vectorize(maxlambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
     return dict
 
-def analyse_meanfr(dict, red_vect, results):
+def analyse_meanfr(dict, red_vect, results, tag):
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
-        meanlambda = lambda l: np.mean(np.array(l))
+        if tag != '': key = tag + ', ' + key
+        meanlambda = lambda l: np.mean(np.array(l)[np.array(l) > 0])
         resultsp = np.vectorize(meanlambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
@@ -208,34 +220,130 @@ def analyse_spikes_spikebins(results):
                         json.dump(data, file, indent=4)
                         file.truncate()
 
-def analyse_maxsize(dict, results):
+def analyse_maxsize(dict, results, tag):
     b = 100
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
+        if tag != '': key = tag + ', ' + key
         maxlambda = lambda l: np.max(np.sum(np.array(l)>0,axis=1)/b)
         resultsp = np.vectorize(maxlambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
     return dict
 
-def analyse_meansize(dict, results):
+def analyse_meansize(dict, results, tag):
     b = 100
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
+        if tag != '': key = tag + ', ' + key
         meanlambda = lambda l: np.mean(np.sum(np.array(l)>0,axis=1)/b)
         resultsp = np.vectorize(meanlambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
     return dict
 
-def analyse_reparea(dict, results):
+def analyse_reparea(dict, results, tag):
     b = 90
     reparealambda = lambda l: np.sum(np.any(np.array(l),axis=0))/b
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
+        if tag != '': key = tag + ', ' + key
         resultsp = np.vectorize(reparealambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
+    return dict
+
+def analyse_meanfrcorr(dict, results, tag, shuffle=False):
+
+    def meanfrcorrlambda(ll):
+        m1 = np.array(ll[0]) + 1e-5
+        m2 = np.array(ll[1]) + 1e-5
+        if shuffle: m1 = m1[np.random.permutation(m1.shape[0])]
+        return np.sum(m1*m2)/(np.linalg.norm(m1)*np.linalg.norm(m2))
+
+    num_pairs = int(num_dirs*(num_dirs-1)/2) # Gauss formula
+    for red_idx, red in enumerate(red_vect):
+        key = 'redun = ' + str(red)
+        if tag != '': key = tag + ', ' + key
+        resultsp = np.zeros((num_dims, num_pairs, num_loadid))
+        pair_idx = 0
+        for dir_idx, _ in enumerate(dir_vect):
+            for dir_idx2 in np.arange(dir_idx):
+                # loop axis are the first ones
+                resultsp[:,pair_idx,:] = np.vectorize(meanfrcorrlambda, signature='(2)->()')(results[red_idx,:,[dir_idx,dir_idx2],:].T).T 
+                pair_idx += 1
+        dict[key] = resultsp.reshape(num_dims, num_pairs*num_loadid).astype('float64')
+
+    return dict
+
+
+def analyse_spatialoverlap(dict, results, tag, shuffle=False):
+
+    def spatialoverlaplambda(ll):
+        m1 = np.array(ll[0])
+        m2 = np.array(ll[1])
+        if shuffle: m1 = m1[:, np.random.permutation(m1.shape[1])]
+        in_both_active = (m1>0).any(axis=1)*(m2>0).any(axis=1)
+        m1 = m1[in_both_active]
+        m2 = m2[in_both_active]
+        if m1.shape[0] != 0:
+            return np.mean(np.sum(m1*m2, axis=1)/(np.linalg.norm(m1,axis=1)*np.linalg.norm(m2,axis=1)))
+        else: return -1
+        
+
+    num_pairs = int(num_dirs*(num_dirs-1)/2) # Gauss formula
+    for red_idx, red in enumerate(red_vect):
+        key = 'redun = ' + str(red)
+        if tag != '': key = tag + ', ' + key
+        resultsp = np.zeros((num_dims, num_pairs, num_loadid))
+        pair_idx = 0
+        for dir_idx, _ in enumerate(dir_vect):
+            for dir_idx2 in np.arange(dir_idx):
+                # loop axis are the first ones
+                resultsp[:,pair_idx,:] = np.vectorize(spatialoverlaplambda, signature='(2)->()')(results[red_idx,:,[dir_idx,dir_idx2],:].T).T 
+                pair_idx += 1
+        dict[key] = resultsp[resultsp != -1].reshape(num_dims, -1).astype('float64')
+
+    return dict
+
+def analyse_nrooms_pfsize(dict, results, tag):
+    # Only for one redundancy and dimension
+    b = 100
+    neu = red_vect[0]*dim_vect[0]
+    for load_idx, loadid in enumerate(loadid_vect):
+        resultsp = np.zeros((2,neu))
+        for dir_idx, _ in enumerate(dir_vect):
+            l = np.array(results[0, 0, dir_idx, load_idx])
+            pfsize = np.sum(l>0,axis=1)/b
+            active_pcs = pfsize > 0
+            resultsp[0,active_pcs] += 1 
+            resultsp[1,:] += pfsize
+        non_zeros = resultsp[1,:] > 0
+        resultsp[1,non_zeros] = resultsp[1,non_zeros]/resultsp[0,non_zeros] #mean across number of rooms it was active in
+
+        key = 'd,n = ' + str(dim_vect[0]) + "," + str(neu) + ",l = " + str(loadid)
+        if tag != '': key = tag + ', ' + key
+        dict[key] = resultsp
+    return dict
+
+def analyse_nrooms_meanfr(dict, results, tag):
+    # Only for one redundancy and dimension
+    b = 100
+    neu = red_vect[0]*dim_vect[0]
+    for load_idx, loadid in enumerate(loadid_vect):
+        resultsp = np.zeros((2,neu))
+        for dir_idx, _ in enumerate(dir_vect):
+            l = np.array(results[0, 0, dir_idx, load_idx])
+            meanfr = np.mean(l, axis=1)
+            active_pcs = meanfr > 0
+            resultsp[0,active_pcs] += 1 
+            resultsp[1,:] += meanfr
+        non_zeros = resultsp[1,:] > 0
+        resultsp[1,non_zeros] = resultsp[1,non_zeros]/resultsp[0,non_zeros] #mean across number of rooms it was active in
+
+        key = 'd,n = ' + str(dim_vect[0]) + "," + str(neu) + ",l = " + str(loadid)
+        if tag != '': key = tag + ', ' + key
+        dict[key] = resultsp
     return dict
 
 
@@ -265,10 +373,17 @@ if __name__ == "__main__":
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./data/NormalizedMiliTorusPCS2/',
                         help="Directory to dump output")
+    parser.add_argument("--compute", type=str, default='tracking_error',
+                        help = 'Which thing to analyse to make')
+    parser.add_argument("--tag", type=str, default='',
+                        help = 'Tag of the condition')
 
     args = parser.parse_args()
 
-compute = 'reparea'
+compute = args.compute
+tag = args.tag
+
+shuffle = True
 
 timestr = time.strftime("%Y%m%d-%H%M%S")
 name = "pcs-" + str(args.dim_pcs)
@@ -294,12 +409,14 @@ elif compute == 'diffs':
     load_func = lambda path, f: read_activepcs_th(path, f)
 elif compute == 'maxfr':
     load_func = lambda path, f: read_maxfr(path,f)
-elif compute == 'meanfr':
+elif compute in {'meanfr', 'meanfrcorr'}:
     load_func = lambda path, f: read_meanfr(path,f)
 elif compute == 'spikebins':
     load_func = lambda path, f: read_spikes(path,f,times=True)
-elif compute in {'maxsize', 'meansize', 'reparea'}:
+elif compute in {'maxsize', 'meansize', 'reparea', 'spatialoverlap', 'nrooms_pfsize', 'nrooms_meanfr'}:
     load_func = lambda path, f: read_spikebins(path,f)
+elif compute == 'tracking_error':
+    load_func = lambda path, f: read_tracking_error(path, f)
 
 print("Loading data...")
 results = load_data(dim_vect, red_vect, dir_vect, loadid_vect, func=load_func)
@@ -321,28 +438,28 @@ else:
 
 print ("Analysing data...")
 dict_save = False
-if compute in {'perpcs', 'npcs'}:
+if compute in {'perpcs', 'npcs', 'tracking_error'}:
     if no_load: dict['xaxis'] = dim_vect
-    dict = analyse_simple(dict, red_vect, results)
+    dict = analyse_simple(dict, red_vect, results, tag)
     dict_save = True
 
 elif compute == 'nrooms':
     if no_load: dict['xaxis'] = np.arange(num_dirs+2)[:-1]
-    dict = analyse_nrooms(dict, dim_vect, red_vect, results)
+    dict = analyse_nrooms(dict, dim_vect, red_vect, results, tag)
     dict_save = True
 
 elif compute == 'diffs':
-    dict = analyse_diffs(dict, dim_vect, red_vect, results)
+    dict = analyse_diffs(dict, dim_vect, red_vect, results, tag)
     dict_save = True
 
 elif compute == 'maxfr':
     if no_load: dict['xaxis'] = dim_vect
-    dict = analyse_maxfr(dict, red_vect, results)
+    dict = analyse_maxfr(dict, red_vect, results, tag)
     dict_save = True
 
 elif compute == 'meanfr':
     if no_load: dict['xaxis'] = dim_vect
-    dict = analyse_meanfr(dict, red_vect, results)
+    dict = analyse_meanfr(dict, red_vect, results, tag)
     dict_save = True
 
 elif compute == 'spikebins':
@@ -350,18 +467,38 @@ elif compute == 'spikebins':
 
 elif compute == 'maxsize':
     if no_load: dict['xaxis'] = dim_vect
-    dict = analyse_maxsize(dict, results)
+    dict = analyse_maxsize(dict, results, tag)
     dict_save = True
 
 elif compute == 'meansize':
     if no_load: dict['xaxis'] = dim_vect
-    dict = analyse_meansize(dict, results)
+    dict = analyse_meansize(dict, results, tag)
     dict_save = True
 
 elif compute == 'reparea':
     if no_load: dict['xaxis'] = dim_vect
-    dict = analyse_reparea(dict, results)
+    dict = analyse_reparea(dict, results, tag)
     dict_save = True
+
+elif compute == 'meanfrcorr':
+    if no_load: dict['xaxis'] = dim_vect
+    dict = analyse_meanfrcorr(dict, results, tag, shuffle)
+    dict_save = True
+
+elif compute == 'spatialoverlap':
+    if no_load: dict['xaxis'] = dim_vect
+    dict = analyse_spatialoverlap(dict, results, tag, shuffle)
+    dict_save = True
+
+elif compute == 'nrooms_pfsize':
+    if no_load: dict['xaxis'] = dim_vect
+    dict = analyse_nrooms_pfsize(dict, results, tag)
+    dict_save = True    
+
+elif compute == 'nrooms_meanfr':
+    if no_load: dict['xaxis'] = dim_vect
+    dict = analyse_nrooms_meanfr(dict, results, tag)
+    dict_save = True    
 
 if dict_save:
     print("Saving results...")
