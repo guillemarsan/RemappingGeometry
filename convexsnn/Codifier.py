@@ -82,8 +82,8 @@ class TorusCod():
         dalpha = np.zeros_like(p)
         alpha[0,:] = cycles * (pr[0,:] + 1)
         alpha[1,:] = cycles * (pr[1,:] + 1)
-        dalpha[0,:] = cycles * (dpr[0,:] + 1)
-        dalpha[1,:] = cycles * (dpr[1,:] + 1)
+        dalpha[0,:] = cycles * dpr[0,:]
+        dalpha[1,:] = cycles * dpr[1,:]
 
 
         if type == 'square' or 'twisted' or 'rhombus':
@@ -136,4 +136,23 @@ class TorusCod():
             dx = 1/np.sqrt(3)*dx
 
         return x, dx
+
+    def decodify(self, y, scale=1/2, type='square'):
+        if scale > 1 or type != 'square':
+            #TODO
+            raise Exception("Decoding still not implemented")
+        else:
+            alpha = np.zeros((2,y.shape[1]))
+            p_hat = np.zeros((2,y.shape[1]))
+
+            alpha[0,:] = np.arctan2(y[1,:],y[0,:])
+            alpha[0,alpha[0,:] < 0] += 2*np.pi
+            alpha[1,:] = np.arctan2(y[3,:],y[2,:])
+            alpha[1,alpha[1,:] < 0] += 2*np.pi
+
+            cycles = scale*np.pi
+            p_hat[0,:] = alpha[0,:]/cycles - 1
+            p_hat[1,:] = alpha[1,:]/cycles - 1
+
+        return p_hat
         
