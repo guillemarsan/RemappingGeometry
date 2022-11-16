@@ -3,7 +3,7 @@ import numpy as np
 
 def get_path(dpcs, type):
     dt = 0.0001
-    time_steps = 300000
+    time_steps = 30000
     t = np.arange(time_steps)*dt
 
     ones = np.ones((dpcs,time_steps))
@@ -24,12 +24,12 @@ def get_path(dpcs, type):
     elif type == 'uspiral':
         r0 = 0.95
         nint = r0*(tmax - t)/tmax
-        a = 2 # half circles
+        a = 20 # half circles
 
         p = nint*np.cos(a*t)*ones
         p[1,:] = nint*np.sin(a*t)*ones[1,:]
-        dp = (1/tmax*np.cos(a*t) - nint*a*np.sin(a*t))*ones
-        dp[1,:] = (1/tmax*np.sin(a*t) + nint*a*np.cos(a*t))*ones[1,:]
+        dp = (-r0/tmax*np.cos(a*t) - nint*a*np.sin(a*t))*ones
+        dp[1,:] = (-r0/tmax*np.sin(a*t) + nint*a*np.cos(a*t))*ones[1,:]
 
     
     return p, dp, t, dt, time_steps
