@@ -23,11 +23,11 @@ if __name__ == "__main__":
                         help="Type of model")  
     parser.add_argument("--nb_neurons", type=int, default=256,
                         help="Number of neurons")
-    parser.add_argument("--dim_bbox", type=int, default=4,
+    parser.add_argument("--dim_bbox", type=int, default=8,
                         help="Dimensionality of outputs") 
     parser.add_argument("--load_id", type=int, default=1,
                         help="In case of load, id of the bbox to load")
-    parser.add_argument('--input_dir', nargs='+', type=float, default=[3.],
+    parser.add_argument('--input_dir', nargs='+', type=float, default=[0.],
                         help="Direction of the input")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
@@ -37,13 +37,13 @@ if __name__ == "__main__":
                         help="Periodicity of the Torus encoding")
     parser.add_argument("--cod_type", type=str, default='square',
                         help="Type of Torus encoding (square, twisted, rhombus, 6D)")
-    parser.add_argument('--embed_affine', action='store_true', default=True,
+    parser.add_argument('--embed_affine', action='store_true', default=False,
                         help="The embedding happens in an affine way")
     parser.add_argument('--current_neurons', nargs='+',type=float,default=[0],
                         help="Neurons to recieve input current")
     parser.add_argument('--current_amp', type=float, default=0.,
                         help="Amplitude of the current input")
-    parser.add_argument("--noise_amp", type=float, default=1.,
+    parser.add_argument("--noise_amp", type=float, default=0.,
                         help="Amplitude of noise")
     parser.add_argument("--decoder_amp", type=float, default=0.2,
                         help="Amplitude of decoder matrix D")
@@ -82,23 +82,24 @@ if __name__ == "__main__":
     if args.dim_pcs == 1:
         path_type = 'ur'
     else:
-        path_type = 'uspiral'
+        path_type = 'constant'
     p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type)   
 
     # Construction of the input
     print('Codifying input...')
     Codifier = TorusCod()
     x, dx = Codifier.codify(p, dp, scale=args.cod_scale, type=args.cod_type)
+    dinput = x.shape[0]
 
     # Construction of the high dimensional embedding
     print('Embedding input...')
-    input_amp = args.input_amp*np.sqrt(dbbox) if args.input_scale else args.input_amp
-    Theta, k = get_embedding(dbbox, dinput=x.shape[0], input_dir=args.input_dir, input_amp=input_amp, D=D,
+    Theta, k = get_embedding(dbbox, dinput=dinput, input_dir=args.input_dir, input_scale=args.input_scale, input_amp=args.input_amp, D=D,
                         vect='random', affine=args.embed_affine)
 
     # Embedd
     x = Theta @ x + k
     dx = Theta @ dx
+    # x = 0*x + D[:,2,np.newaxis]*(np.sqrt(dbbox)/args.decoder_amp)
 
     c = model.lamb*x + dx
 
@@ -107,24 +108,32 @@ if __name__ == "__main__":
     I, b = get_current(dbbox, t, G, args.noise_amp, args.current_neurons, args.current_amp, vect='neuron', rseed=args.seed)
     #I = I - G@(model.lamb*z + dz)
 
+    # Bias correction for D
+    input_amp = np.sqrt(dbbox)*args.input_amp if args.input_scale else args.input_amp
+    bias_corr = input_amp/(input_amp+0.5*(args.decoder_amp - args.thresh_amp))
+
     # Simulate/train the model
     print('Simulating model...')
     x0 = x[:,0]
-    r0 = np.linalg.lstsq(D,x0+b[:,0]/model.lamb,rcond=None)[0]
+    r0 = np.linalg.lstsq(bias_corr*D,x0+b[:,0]/model.lamb,rcond=None)[0]
     y0 = D @ r0 - b[:,0] / model.lamb      
     V0 = model.F @ x0 - G @ y0
 
-    V, s, r = model.simulate(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+    V, s, r = model.simulate_one(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
 
     # Decode y
-    decod = D @ r
-    bias_corr = input_amp/(input_amp+0.5*(args.decoder_amp - args.thresh_amp))
-    y = bias_corr*decod - b / model.lamb
+    # bias_corr = np.zeros((dbbox,1))
+    # bias_corr[0:dinput] = np.sqrt(dinput)/(np.sqrt(dinput)+0.5*(args.decoder_amp - args.thresh_amp))
+    # bias_corr[dinput:] = np.sqrt(dbbox-dinput)/(np.sqrt(dbbox-dinput)+0.5*(args.decoder_amp - args.thresh_amp))
+    y = bias_corr*(D @ r) - b / model.lamb
+    y_disem = (1/(input_amp**2))*Theta.T @ (y - k)
+    p_hat = Codifier.decodify(y_disem, scale=args.cod_scale, type=args.cod_type)
 
     # Save results 
     print('Saving results...')
     results['y_end'] = y[:,-1].tolist()
     results['tracking_error'] = np.mean(np.linalg.norm(y - x, axis=0))
+    results['spatial_tracking_error'] = np.mean(np.linalg.norm(p_hat - p, axis=0))
 
     # PCs
     active_list = np.any(s,axis=1)
@@ -152,8 +161,9 @@ if __name__ == "__main__":
     if args.save:
         np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
         results['Th'] = "%s-Th.csv" % name
-        np.savetxt("%s-k.csv" % basepath, k, fmt='%.3e')
-        results['k'] = "%s-k.csv" % name
+        if args.embed_affine:
+            np.savetxt("%s-k.csv" % basepath, k, fmt='%.3e')
+            results['k'] = "%s-k.csv" % name
         # np.savetxt("%s-V.csv" % basepath, V)
         # results['V'] = "%s-V.csv" % name
         spike_times = np.argwhere(s)

@@ -2,7 +2,7 @@
 import numpy as np
 from scipy.stats import ortho_group
 
-def get_embedding(dbbox, dinput, input_dir, input_amp, D, vect='neuron', affine=False):
+def get_embedding(dbbox, dinput, input_dir, input_scale, input_amp, D, vect='neuron', affine=False):
 
     Basis = np.zeros((dbbox, dinput))
 
@@ -37,19 +37,25 @@ def get_embedding(dbbox, dinput, input_dir, input_amp, D, vect='neuron', affine=
 
         # Scale
         Basis = Basis/np.linalg.norm(Basis,axis=0)
-        k = np.zeros((dbbox,1))
+        if input_scale:
+            Basis = np.sqrt(dbbox)*Basis
+        affine_dir = np.zeros(dbbox)
     else:
         Q = np.eye(dbbox)
         Basis = Q[:,:dinput]
+        daffine = dbbox - dinput
 
         np.random.seed(seed=int(input_dir[0]))
-        affine_dir = np.random.rand(dbbox)
-        affine_dir[:dinput] = 0
+        affine_dir = np.random.rand(daffine)-0.5
         affine_dir = affine_dir/np.linalg.norm(affine_dir)
-        k_mag = np.random.uniform(-5,5)
-        k = k_mag*affine_dir[:,np.newaxis]
-        k = np.zeros((dbbox,1))
+        
+        if input_scale:
+            Basis = np.sqrt(dinput)*Basis
+            affine_dir = np.sqrt(daffine)*affine_dir
 
+        affine_dir = np.concatenate((np.zeros(dinput),affine_dir))
+ 
     Theta = input_amp*Basis
+    k = input_amp*affine_dir[:,np.newaxis]
 
     return Theta, k
