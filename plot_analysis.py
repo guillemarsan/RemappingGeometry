@@ -4,7 +4,7 @@ import pickle
 import numpy as np
 import time
 
-from convexsnn.plot import plot_errorplot, plot_scatterplot
+from convexsnn.plot import plot_errorplot, plot_scatterplot, plot_violinplot
 
 
 if __name__ == "__main__":
@@ -22,17 +22,17 @@ if __name__ == "__main__":
                         help="Number of bbox loadids used")
     parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[16, 32, 64],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
     parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
                         help="LoadID of the bbox vector")
-    parser.add_argument("--read_dir", type=str, default='./data/NormalizedMiliTorusPCS',
+    parser.add_argument("--read_dir", type=str, default='./data/DBTorusPCS',
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./out/',
                         help="Directory to dump output")
-    parser.add_argument("--plot", type=str, default='tracking_error',
+    parser.add_argument("--plot", type=str, default='perpcs',
                         help = 'Which plot to make')
     parser.add_argument('--tags', nargs='+', type=str, default=[''],
                         help="Conditions to plot")
@@ -160,7 +160,7 @@ elif plot == 'maxsize':
 
     title = 'Maximum place field size'
     xaxis = dict['xaxis']
-    labels = ['Dimension', 'Max PF size'] 
+    labels = ['Dimension', 'Max PF size ($cm^2$)'] 
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
 
@@ -168,7 +168,7 @@ elif plot == 'meansize':
 
     title = 'Mean place field size'
     xaxis = dict['xaxis']
-    labels = ['Embedding dimension', 'Mean PF size (%)'] 
+    labels = ['Embedding dimension', 'Mean PF size ($cm^2$)'] 
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
 
@@ -199,16 +199,16 @@ elif plot == 'spatialoverlap':
 elif plot == 'nrooms_pfsize':
     
     title = 'Relationship between number of rooms and mean pf size'
-    labels = ['Number of rooms', 'Mean pf size (%)']
+    labels = ['Number of rooms', 'Mean pf size ($cm^2$)']
     print("Plotting results...")
-    plot_scatterplot(dict2, title, labels, basepath, separated_fits = False)
+    plot_violinplot(dict2, title, labels, basepath)
 
 elif plot == 'nrooms_meanfr':
     
     title = 'Relationship between number of rooms and mean firing rate'
     labels = ['Number of rooms', 'Mean FR']
     print("Plotting results...")
-    plot_scatterplot(dict2, title, labels, basepath, separated_fits = False)
+    plot_violinplot(dict2, title, labels, basepath)
 
 elif plot == 'tracking_error':
     

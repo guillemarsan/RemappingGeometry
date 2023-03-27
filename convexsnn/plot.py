@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.animation as animation
 from mpl_toolkits.mplot3d import Axes3D as plt3d
+from scipy.stats.stats import pearsonr
 
 def plot_iofunc(x, y, F, G, T, basepath):
     
@@ -496,3 +497,49 @@ def plot_step(data, title, labels, basepath):
     filepath = "%s-freq_diffs.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
+def plot_violinplot(data, title, labels, basepath):
+
+    color_list = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    color_idx = 1
+
+    total_px = np.array([])
+    total_py = np.array([])
+    plt.figure(figsize=(5,5))
+    for key, res in data.items():
+        px_vect = res[0,:]
+        py_vect = res[1,:]
+        total_px = np.append(total_px,px_vect)
+        total_py = np.append(total_py,py_vect)
+    
+    xticks = np.unique(total_px)
+    dataset = []
+    means =[]
+    stds = []
+    for xt in xticks:
+        pointsxt = total_py[total_px == xt]
+        dataset.append(pointsxt)
+        means.append(np.mean(pointsxt))
+        stds.append(np.std(pointsxt))
+
+
+    plt.violinplot(dataset, showextrema=False)
+    plt.errorbar(xticks, means, stds, linestyle='None', fmt='o', capsize=5, color='k')
+
+    coeffs = np.polyfit(total_px,total_py,1)
+    Rp = pearsonr(total_px, total_py)
+    plt.text(0.6, 0.9, "R = {:.4f} \n p = {:.4f}".format(Rp[0], Rp[1]), transform=plt.gca().transAxes)
+    samples = np.linspace(np.min(px_vect)-0.01,np.max(px_vect)+0.01,100)
+    pyhat = coeffs[1] + coeffs[0]*samples
+    plt.plot(samples,pyhat,color=color_list[color_idx % 10])
+    
+
+    plt.title(title, fontsize=10)
+    plt.xlabel(labels[0], fontsize=10)
+    plt.ylabel(labels[1], fontsize=10)
+    plt.tick_params(axis='both', labelsize=10)
+    plt.ylim(bottom=0)
+    plt.legend()
+
+    plt.tight_layout()
+    filepath = "%s-scatter.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')

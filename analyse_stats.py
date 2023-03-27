@@ -222,10 +222,11 @@ def analyse_spikes_spikebins(results):
 
 def analyse_maxsize(dict, results, tag):
     b = 100
+    totala = 40000 #area of the arena in cm2
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
         if tag != '': key = tag + ', ' + key
-        maxlambda = lambda l: np.max(np.sum(np.array(l)>0,axis=1)/b)
+        maxlambda = lambda l: np.max(np.sum(np.array(l)>0,axis=1)/b)*totala
         resultsp = np.vectorize(maxlambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
@@ -233,10 +234,11 @@ def analyse_maxsize(dict, results, tag):
 
 def analyse_meansize(dict, results, tag):
     b = 100
+    totala = 40000 #area of the arena in cm2
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
         if tag != '': key = tag + ', ' + key
-        meanlambda = lambda l: np.mean(np.sum(np.array(l)>0,axis=1)/b)
+        meanlambda = lambda l: np.mean(np.sum(np.array(l)>0,axis=1)/b)*totala
         resultsp = np.vectorize(meanlambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
@@ -309,17 +311,18 @@ def analyse_spatialoverlap(dict, results, tag, shuffle=False):
 def analyse_nrooms_pfsize(dict, results, tag):
     # Only for one redundancy and dimension
     b = 100
+    totala = 40000 #area of the arena in cm2
     neu = red_vect[0]*dim_vect[0]
     for load_idx, loadid in enumerate(loadid_vect):
         resultsp = np.zeros((2,neu))
         for dir_idx, _ in enumerate(dir_vect):
             l = np.array(results[0, 0, dir_idx, load_idx])
-            pfsize = np.sum(l>0,axis=1)/b
+            pfsize = np.sum(l>0,axis=1)/b*totala
             active_pcs = pfsize > 0
             resultsp[0,active_pcs] += 1 
             resultsp[1,:] += pfsize
-        non_zeros = resultsp[1,:] > 0
-        resultsp[1,non_zeros] = resultsp[1,non_zeros]/resultsp[0,non_zeros] #mean across number of rooms it was active in
+        resultsp = resultsp[:,resultsp[1,:] > 0] #delete non active cells
+        resultsp[1,:] = resultsp[1,:]/resultsp[0,:] #mean across number of rooms it was active in
 
         key = 'd,n = ' + str(dim_vect[0]) + "," + str(neu) + ",l = " + str(loadid)
         if tag != '': key = tag + ', ' + key
@@ -338,8 +341,8 @@ def analyse_nrooms_meanfr(dict, results, tag):
             active_pcs = meanfr > 0
             resultsp[0,active_pcs] += 1 
             resultsp[1,:] += meanfr
-        non_zeros = resultsp[1,:] > 0
-        resultsp[1,non_zeros] = resultsp[1,non_zeros]/resultsp[0,non_zeros] #mean across number of rooms it was active in
+        resultsp = resultsp[:,resultsp[1,:] > 0] #delete non active cells
+        resultsp[1,:] = resultsp[1,:]/resultsp[0,:] #mean across number of rooms it was active in
 
         key = 'd,n = ' + str(dim_vect[0]) + "," + str(neu) + ",l = " + str(loadid)
         if tag != '': key = tag + ', ' + key
@@ -363,18 +366,20 @@ if __name__ == "__main__":
                         help="Number of bbox loadids used")
     parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[16, 32, 64],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
     parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
                         help="LoadID of the bbox vector")
-    parser.add_argument("--read_dir", type=str, default='./data/NormalizedMiliTorusPCS',
+    parser.add_argument("--read_dir", type=str, default='./data/DBTorusPCS',
                         help="Directory to read files")
-    parser.add_argument("--write_dir", type=str, default='./data/NormalizedMiliTorusPCS2/',
+    parser.add_argument("--write_dir", type=str, default='./data/DBTorusPCS2/',
                         help="Directory to dump output")
-    parser.add_argument("--compute", type=str, default='tracking_error',
+    parser.add_argument("--compute", type=str, default='meansize',
                         help = 'Which thing to analyse to make')
+    parser.add_argument("--shuffle", action='store_true', default=False,
+                        help="Shuffle the data in some way")
     parser.add_argument("--tag", type=str, default='',
                         help = 'Tag of the condition')
 
@@ -382,8 +387,7 @@ if __name__ == "__main__":
 
 compute = args.compute
 tag = args.tag
-
-shuffle = True
+shuffle = args.shuffle
 
 timestr = time.strftime("%Y%m%d-%H%M%S")
 name = "pcs-" + str(args.dim_pcs)
