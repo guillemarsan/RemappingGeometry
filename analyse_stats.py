@@ -349,12 +349,10 @@ def analyse_rank_increase(dict, results, tag):
     # Only for one redundancy, dimension and loadid
     neu = red_vect[0]*dim_vect[0]
     resultsp = np.zeros((num_dirs,1))
-    accum = np.empty((0,neu))
-    # filepath = './saved_bbox/seed' + str(loadid_vect[0]) + '/randclosed-load-polyae-dim-' + str(dim_vect[0]) + '-n-' + str(neu) + '-s-' + str(loadid_vect[0]) + '.npy'
-    # D = np.load(filepath) + 1e-5
+    accum = np.empty((dim_vect[0],0))
     for dir_idx, _ in enumerate(dir_vect):
         th = np.array(results[0, 0, dir_idx, 0])
-        accum = np.append(accum,th.T @ D, axis=0)
+        accum = np.append(accum, th, axis=1)
         resultsp[dir_idx,0] = np.linalg.matrix_rank(accum)
 
     key = 'd,n = ' + str(dim_vect[0]) + "," + str(neu)
