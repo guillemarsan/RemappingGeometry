@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.animation as animation
+from utils import compute_meshgrid, compute_ratemap, compute_pf
 from mpl_toolkits.mplot3d import Axes3D as plt3d
 from scipy.stats.stats import pearsonr
 
@@ -332,10 +333,7 @@ def plot_2dspikebins(p, s, dt, b, basepath, n_vect, maxfr=None, grid=True):
     step = 2*radius/np.sqrt(b)
 
     if grid:
-        rows = np.arange(-radius+step/2, radius, step=step)
-        ptr = rows.shape[0]
-        pts = np.arange(ptr**2)
-        ppts = np.dstack(np.meshgrid(rows, -rows)).reshape(-1,2).T
+        bins = compute_meshgrid(radius, b)
     else:
         binsize = int(s.shape[1]/b)
         pts = np.arange(b)
@@ -345,15 +343,17 @@ def plot_2dspikebins(p, s, dt, b, basepath, n_vect, maxfr=None, grid=True):
     nrows = int(np.ceil(n/ncols))
     for i in np.arange(n):
         plt.subplot(nrows, ncols, i+1)
-        sums = np.zeros(pts.shape[0])
-        for j in pts:
-            if grid:
-                dist = np.max(np.abs(np.expand_dims(ppts[:,j],-1)-p), axis=0)
-            else:
-                dist = np.linalg.norm(np.expand_dims(ppts[:,j],-1)-p, axis=0)
-            consider = np.argwhere(dist < (step/2))
-            sums[j] = np.sum(s[n_vect[i],consider])/(consider.size*dt) if consider.size != 0 else 0
+        sums = np.zeros(bins.shape[1])
         if grid:
+            ratemap = compute_ratemap(p, s[n_vect[i]], dt, bins)
+            sums = compute_pf(ratemap, bins)
+        else:
+            for j in np.arange(bins.shape[1]):
+                dist = np.linalg.norm(np.expand_dims(ppts[:,j],-1)-p, axis=0)
+                consider = np.argwhere(dist < (step/2))
+                sums[j] = np.sum(s[n_vect[i],consider])/(consider.size*dt) if consider.size != 0 else 0
+        if grid:
+            ptr = int(np.sqrt(b))
             plt.imshow(np.reshape(sums, (ptr,ptr)), cmap='jet', interpolation='bilinear')
         else:
             plt.scatter(ppts[0,:],ppts[1,:],c=sums, cmap='jet')
