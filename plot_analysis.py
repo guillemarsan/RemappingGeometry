@@ -20,9 +20,9 @@ if __name__ == "__main__":
                         help="Number of input directions")
     parser.add_argument("--num_loadids", type=int, default=3,
                         help="Number of bbox loadids used")
-    parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
+    parser.add_argument('--dim_vect', nargs='+', type=int, default=[16],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[16, 32, 64],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
@@ -32,7 +32,7 @@ if __name__ == "__main__":
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./out/',
                         help="Directory to dump output")
-    parser.add_argument("--plot", type=str, default='perpcs',
+    parser.add_argument("--plot", type=str, default='rank_increase',
                         help = 'Which plot to make')
     parser.add_argument('--tags', nargs='+', type=str, default=[''],
                         help="Conditions to plot")
@@ -58,8 +58,8 @@ print("Loading results...")
 
 patt = "*-%s_dict.pkl" % plot
 path = pathlib.Path(args.read_dir + str(args.dim_pcs))
-results_files = path.rglob(patt)
-file = next(results_files)
+results_files = sorted(path.rglob(patt))
+file = results_files[-1]
 file_name = str(file)
 with open(file_name, 'rb') as f:
     dict = pickle.load(f)
@@ -107,6 +107,22 @@ elif plot in {'nrooms_pfsize', 'nrooms_meanfr'}:
         if key in allowed_keys:
             dict2[key] = value
 
+elif plot in {'rank_increase'}:
+
+    allowed_keys = []
+    red = red_vect[0]
+    dim = dim_vect[0]
+    loadid = loadid_vect[0]
+    neu = red*dim
+    for tag in tags_vect:
+        if tag != '': allowed_keys.append(tag + ', d,n = ' + str(dim) + "," + str(neu))
+        else: allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
+    dict2 = {}
+    for key, value in dict.items():
+        if key in allowed_keys:
+            dict2[key] = value
+
+
 # Plotting
 print ("Plotting results...")
 if plot == 'perpcs':
@@ -132,6 +148,14 @@ elif plot == 'nrooms':
     labels = ['Number of rooms', 'Percentage of PCs']
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath)
+
+elif plot == 'rank_increase':
+
+    title = 'Increase of dimensionality with environments'
+    xaxis = dict['xaxis']
+    labels = ['Number of rooms', 'Dimensionality']
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
 
 elif plot == 'diffs':
     

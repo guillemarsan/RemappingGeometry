@@ -1,5 +1,6 @@
 from operator import ne
 import pathlib, argparse, json, time
+from utils import compute_meshgrid, compute_ratemap, compute_pf
 import pickle
 import numpy as np
 import time
@@ -60,6 +61,9 @@ def read_npcs(path,f):
 
 def read_activepcs(path,f):
     return f['pcsidx']
+
+def read_th(path,f):
+    return read_matrix(path, f, 'Th')
 
 def read_activepcs_th(path,f):
     active_list = f['pcsidx']
@@ -181,6 +185,7 @@ def analyse_meanfr(dict, red_vect, results, tag):
 
 def analyse_spikes_spikebins(results):
     b = 100
+    radius = 1
     p, dp, t, dt, time_steps = get_path(dpcs=2, type='uspiral')
 
     for red_idx, red in enumerate(red_vect):
@@ -194,28 +199,20 @@ def analyse_spikes_spikebins(results):
                     f = res[1]
                     s = res[2]
 
-                    radius = 1
-                    row_col = int(np.sqrt(b))
-                    step = 2*radius/row_col
-                   
-                    rows = np.arange(-radius+step/2, radius, step=step)
-                    ptr = rows.shape[0]
-                    pts = np.arange(ptr**2)
-                    ppts = np.dstack(np.meshgrid(rows, -rows)).reshape(-1,2).T
-                    
-                    spikebins = np.zeros((neu,b))
-                    for i in np.arange(neu):
-                        sums = np.zeros(pts.shape[0])
-                        for j in pts:
-                            dist = np.max(np.abs(np.expand_dims(ppts[:,j],-1)-p), axis=0)
-                            consider = np.argwhere(dist < (step/2))
-                            sums[j] = np.sum(s[i,consider])/(consider.size*dt) if consider.size != 0 else 0
-                        spikebins[i,:] = sums
+                    bins = compute_meshgrid(radius,b)
 
-                    np.savetxt("{0}/{1}-spikebins.csv".format(path,f), spikebins, fmt='%.3e')
+                    ratemaps = np.zeros((neu,b))
+                    placefields = np.zeros((neu,b))
+                    for i in np.arange(neu):
+                        ratemaps[i,:] = compute_ratemap(p, s[i,:], dt, bins)
+                        placefields[i,:] = compute_pf(ratemaps[i,:], bins)
+
+                    np.savetxt("{0}/{1}-ratemaps.csv".format(path,f), ratemaps, fmt='%.3e')
+                    np.savetxt("{0}/{1}-pfs.csv".format(path,f), placefields, fmt='%.3e')
                     with open('{0}/{1}.json'.format(path,f), 'r+') as file:
                         data = json.load(file)
-                        data['spikebins'] = "%s-spikebins.csv" % f
+                        data['ratemaps'] = "%s-ratemaps.csv" % f
+                        data['pfs'] = "%s-pfs.csv" % f
                         file.seek(0)
                         json.dump(data, file, indent=4)
                         file.truncate()
@@ -342,13 +339,28 @@ def analyse_nrooms_meanfr(dict, results, tag):
             resultsp[0,active_pcs] += 1 
             resultsp[1,:] += meanfr
         resultsp = resultsp[:,resultsp[1,:] > 0] #delete non active cells
-        resultsp[1,:] = resultsp[1,:]/resultsp[0,:] #mean across number of rooms it was active in
 
         key = 'd,n = ' + str(dim_vect[0]) + "," + str(neu) + ",l = " + str(loadid)
         if tag != '': key = tag + ', ' + key
         dict[key] = resultsp
     return dict
 
+def analyse_rank_increase(dict, results, tag):
+    # Only for one redundancy, dimension and loadid
+    neu = red_vect[0]*dim_vect[0]
+    resultsp = np.zeros((num_dirs,1))
+    accum = np.empty((0,neu))
+    # filepath = './saved_bbox/seed' + str(loadid_vect[0]) + '/randclosed-load-polyae-dim-' + str(dim_vect[0]) + '-n-' + str(neu) + '-s-' + str(loadid_vect[0]) + '.npy'
+    # D = np.load(filepath) + 1e-5
+    for dir_idx, _ in enumerate(dir_vect):
+        th = np.array(results[0, 0, dir_idx, 0])
+        accum = np.append(accum,th.T @ D, axis=0)
+        resultsp[dir_idx,0] = np.linalg.matrix_rank(accum)
+
+    key = 'd,n = ' + str(dim_vect[0]) + "," + str(neu)
+    if tag != '': key = tag + ', ' + key
+    dict[key] = resultsp
+    return dict
 
 
 if __name__ == "__main__":
@@ -362,11 +374,11 @@ if __name__ == "__main__":
                         help="Number of redundancies")                   
     parser.add_argument("--num_dirs", type=int, default=6,
                         help="Number of input directions")
-    parser.add_argument("--num_loadids", type=int, default=3,
+    parser.add_argument("--num_loadids", type=int, default=0,
                         help="Number of bbox loadids used")
-    parser.add_argument('--dim_vect', nargs='+', type=int, default=[4, 8, 16, 32],
+    parser.add_argument('--dim_vect', nargs='+', type=int, default=[16],
                         help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[16, 32, 64],
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
                         help="Redundancy of the bbox")
     parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
                         help="Direction of the input vector")
@@ -376,7 +388,7 @@ if __name__ == "__main__":
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./data/DBTorusPCS2/',
                         help="Directory to dump output")
-    parser.add_argument("--compute", type=str, default='meansize',
+    parser.add_argument("--compute", type=str, default='rank_increase',
                         help = 'Which thing to analyse to make')
     parser.add_argument("--shuffle", action='store_true', default=False,
                         help="Shuffle the data in some way")
@@ -409,6 +421,8 @@ elif compute == 'npcs':
     load_func = lambda path, f: read_npcs(path,f)
 elif compute == 'nrooms':
     load_func = lambda path, f: read_activepcs(path, f)
+elif compute == 'rank_increase':
+    load_func = lambda path, f: read_th(path,f)
 elif compute == 'diffs':
     load_func = lambda path, f: read_activepcs_th(path, f)
 elif compute == 'maxfr':
@@ -450,6 +464,11 @@ if compute in {'perpcs', 'npcs', 'tracking_error'}:
 elif compute == 'nrooms':
     if no_load: dict['xaxis'] = np.arange(num_dirs+2)[:-1]
     dict = analyse_nrooms(dict, dim_vect, red_vect, results, tag)
+    dict_save = True
+
+elif compute == 'rank_increase':
+    if no_load: dict['xaxis'] = np.arange(num_dirs+2)[1:-1]
+    dict = analyse_rank_increase(dict, results, tag)
     dict_save = True
 
 elif compute == 'diffs':
