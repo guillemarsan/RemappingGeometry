@@ -4,7 +4,7 @@ import pickle
 import numpy as np
 import time
 
-from convexsnn.plot import plot_errorplot, plot_scatterplot, plot_violinplot
+from convexsnn.plot import plot_errorplot, plot_scatterplot, plot_violinplot, plot_displot
 
 
 if __name__ == "__main__":
@@ -20,7 +20,7 @@ if __name__ == "__main__":
                         help="Number of input directions")
     parser.add_argument("--num_loadids", type=int, default=3,
                         help="Number of bbox loadids used")
-    parser.add_argument('--dim_vect', nargs='+', type=int, default=[16],
+    parser.add_argument('--dim_vect', nargs='+', type=int, default=[4],
                         help="Dimension of the bbox")
     parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
                         help="Redundancy of the bbox")
@@ -32,7 +32,7 @@ if __name__ == "__main__":
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./out/',
                         help="Directory to dump output")
-    parser.add_argument("--plot", type=str, default='rank_increase',
+    parser.add_argument("--plot", type=str, default='spatialinfo',
                         help = 'Which plot to make')
     parser.add_argument('--tags', nargs='+', type=str, default=[''],
                         help="Conditions to plot")
@@ -78,7 +78,7 @@ if plot in {'perpcs', 'npcs', 'maxfr', 'meanfr', 'maxsize', 'meansize', 'reparea
         if key in allowed_keys:
             dict2[key] = value
 
-elif plot in {'nrooms', 'diffs'}:
+elif plot in {'nrooms', 'diffs', 'rank_increase'}:
 
     allowed_keys = []
     for red in red_vect:
@@ -107,21 +107,21 @@ elif plot in {'nrooms_pfsize', 'nrooms_meanfr'}:
         if key in allowed_keys:
             dict2[key] = value
 
-elif plot in {'rank_increase'}:
+elif plot in {'spatialinfo'}:
 
     allowed_keys = []
     red = red_vect[0]
     dim = dim_vect[0]
+    dir = dir_vect[0]
     loadid = loadid_vect[0]
     neu = red*dim
     for tag in tags_vect:
-        if tag != '': allowed_keys.append(tag + ', d,n = ' + str(dim) + "," + str(neu))
-        else: allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
+        if tag != '': allowed_keys.append(tag + ', ' + 'd = ' + str(dim) + ", n =" + str(neu) + ", dir =" + str(dir) + ", l =" + str(loadid))
+        else: allowed_keys.append('d = ' + str(dim) + ", n =" + str(neu) + ", dir =" + str(dir) + ", l =" + str(loadid))
     dict2 = {}
     for key, value in dict.items():
         if key in allowed_keys:
             dict2[key] = value
-
 
 # Plotting
 print ("Plotting results...")
@@ -179,6 +179,14 @@ elif plot == 'meanfr':
     labels = ['Dimension', 'Mean FR'] 
     print("Plotting results...")
     plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'spatialinfo':
+
+    title = 'Spatial information distribution'
+    xaxis = dict['xaxis']
+    labels = ['Spatial information (bits/s)', 'Percentage of neurons']
+    print("Plotting results...")
+    plot_displot(dict2, xaxis, title, labels, basepath, ynormalized=False)
 
 elif plot == 'maxsize':
 

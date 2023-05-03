@@ -6,6 +6,11 @@ import numpy as np
 import time
 from convexsnn.path import get_path
 
+##################### STANDARDS ###################################
+
+b = 100 #number of bins
+radius = 1 #radius of the environment
+bin_size = (2*radius)**2/b #bin_size
 
 ##################### DATA LOAD ###################################
 def read_matrix(path,f,matrix='s'):
@@ -184,8 +189,6 @@ def analyse_meanfr(dict, red_vect, results, tag):
     return dict
 
 def analyse_spikes_spikebins(results):
-    b = 100
-    radius = 1
     p, dp, t, dt, time_steps = get_path(dpcs=2, type='uspiral')
 
     for red_idx, red in enumerate(red_vect):
@@ -217,32 +220,70 @@ def analyse_spikes_spikebins(results):
                         json.dump(data, file, indent=4)
                         file.truncate()
 
+def analyse_spatialinfo(dict, results, tag):
+    uniform = True
+    if not uniform: p, dp, t, dt, time_steps = get_path(dpcs=2, type='uspiral')
+    bins = compute_meshgrid(radius, b)
+    step = np.sqrt(bin_size)/2
+    
+    for red_idx, red in enumerate(red_vect):
+        for dim_idx, dim  in enumerate(dim_vect):
+            for dir_idx, dir in enumerate(dir_vect):
+                for loadid_idx, loadid in enumerate(loadid_vect):
+                    neu = red*dim
+                    prob = np.zeros((b,))
+                    info_bin = np.zeros((b, neu))
+                    results_spatialinfo = np.zeros((neu, 1))
+                    aux = 0
+                    all_ratemaps = results[red_idx,dim_idx,dir_idx,loadid_idx]
+                    meanfr = np.mean(all_ratemaps,axis=1)
+                    for j in np.arange(b):
+                        if not uniform:
+                            dist = np.max(np.abs(np.expand_dims(bins[:,j],-1)-p), axis=0) # Manhattan distance
+                            consider = np.argwhere(dist < step)
+                            aux += np.sum(consider.size)
+                            prob[j] = consider.size*dt/(np.max(t))
+                        else: prob[j] = 1/b
+
+                        active = np.where(all_ratemaps[:,j]>0)[0]
+                        if active.size != 0:
+                            info_bin[j,active] = prob[j]*all_ratemaps[active,j] *np.log2(all_ratemaps[active,j]/meanfr[active])
+
+                    results_spatialinfo = np.sum(info_bin, axis=0)
+                    info_bins = np.arange(0,np.max(results_spatialinfo),10)
+                    if np.max(dict['xaxis']) <  np.max(results_spatialinfo):
+                        dict['xaxis'] = [(a+info_bins[i+1])/2.0 for i,a in enumerate(info_bins[0:-1])]
+
+                    hist = np.apply_along_axis(lambda a: np.histogram(a, bins=info_bins), 0, results_spatialinfo[np.where(np.sum(all_ratemaps,axis=1))[0]])
+                    key = 'd = ' + str(dim) + ", n =" + str(neu) + ", dir =" + str(dir) + ", l =" + str(loadid)
+                    if tag != '': key = tag + ', ' + key
+                    dict[key] = np.expand_dims(hist[0],-1)
+    return dict
+
 def analyse_maxsize(dict, results, tag):
-    b = 100
-    totala = 40000 #area of the arena in cm2
+    
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
         if tag != '': key = tag + ', ' + key
-        maxlambda = lambda l: np.max(np.sum(np.array(l)>0,axis=1)/b)*totala
+        maxlambda = lambda l: np.max(np.sum(np.array(l)>0,axis=1)*bin_size)
         resultsp = np.vectorize(maxlambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
     return dict
 
 def analyse_meansize(dict, results, tag):
-    b = 100
-    totala = 40000 #area of the arena in cm2
+
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
         if tag != '': key = tag + ', ' + key
-        meanlambda = lambda l: np.mean(np.sum(np.array(l)>0,axis=1)/b)*totala
+        meanlambda = lambda l: np.mean(np.sum(np.array(l)>0,axis=1)*bin_size)
         resultsp = np.vectorize(meanlambda)(results[red_idx,:,:,:])
         dict[key] = resultsp.reshape(num_dims, num_dirs*num_loadid).astype('float64')
 
     return dict
 
 def analyse_reparea(dict, results, tag):
-    b = 90
+    
     reparealambda = lambda l: np.sum(np.any(np.array(l),axis=0))/b
     for red_idx, red in enumerate(red_vect):
         key = 'redun = ' + str(red)
@@ -307,14 +348,13 @@ def analyse_spatialoverlap(dict, results, tag, shuffle=False):
 
 def analyse_nrooms_pfsize(dict, results, tag):
     # Only for one redundancy and dimension
-    b = 100
-    totala = 40000 #area of the arena in cm2
+    
     neu = red_vect[0]*dim_vect[0]
     for load_idx, loadid in enumerate(loadid_vect):
         resultsp = np.zeros((2,neu))
         for dir_idx, _ in enumerate(dir_vect):
             l = np.array(results[0, 0, dir_idx, load_idx])
-            pfsize = np.sum(l>0,axis=1)/b*totala
+            pfsize = np.sum(l>0,axis=1)*bin_size
             active_pcs = pfsize > 0
             resultsp[0,active_pcs] += 1 
             resultsp[1,:] += pfsize
@@ -328,7 +368,6 @@ def analyse_nrooms_pfsize(dict, results, tag):
 
 def analyse_nrooms_meanfr(dict, results, tag):
     # Only for one redundancy and dimension
-    b = 100
     neu = red_vect[0]*dim_vect[0]
     for load_idx, loadid in enumerate(loadid_vect):
         resultsp = np.zeros((2,neu))
@@ -360,7 +399,6 @@ def analyse_rank_increase(dict, results, tag):
     dict[key] = resultsp
     return dict
 
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
@@ -374,7 +412,7 @@ if __name__ == "__main__":
                         help="Number of input directions")
     parser.add_argument("--num_loadids", type=int, default=0,
                         help="Number of bbox loadids used")
-    parser.add_argument('--dim_vect', nargs='+', type=int, default=[16],
+    parser.add_argument('--dim_vect', nargs='+', type=int, default=[4],
                         help="Dimension of the bbox")
     parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
                         help="Redundancy of the bbox")
@@ -386,7 +424,7 @@ if __name__ == "__main__":
                         help="Directory to read files")
     parser.add_argument("--write_dir", type=str, default='./data/DBTorusPCS2/',
                         help="Directory to dump output")
-    parser.add_argument("--compute", type=str, default='rank_increase',
+    parser.add_argument("--compute", type=str, default='spatialinfo',
                         help = 'Which thing to analyse to make')
     parser.add_argument("--shuffle", action='store_true', default=False,
                         help="Shuffle the data in some way")
@@ -429,7 +467,7 @@ elif compute in {'meanfr', 'meanfrcorr'}:
     load_func = lambda path, f: read_meanfr(path,f)
 elif compute == 'spikebins':
     load_func = lambda path, f: read_spikes(path,f,times=True)
-elif compute in {'maxsize', 'meansize', 'reparea', 'spatialoverlap', 'nrooms_pfsize', 'nrooms_meanfr'}:
+elif compute in {'maxsize', 'meansize', 'reparea', 'spatialoverlap', 'nrooms_pfsize', 'nrooms_meanfr', 'spatialinfo'}:
     load_func = lambda path, f: read_spikebins(path,f)
 elif compute == 'tracking_error':
     load_func = lambda path, f: read_tracking_error(path, f)
@@ -519,7 +557,12 @@ elif compute == 'nrooms_pfsize':
 elif compute == 'nrooms_meanfr':
     if no_load: dict['xaxis'] = dim_vect
     dict = analyse_nrooms_meanfr(dict, results, tag)
-    dict_save = True    
+    dict_save = True   
+
+elif compute == 'spatialinfo':
+    if no_load: dict['xaxis'] = dim_vect
+    dict = analyse_spatialinfo(dict, results, tag)
+    dict_save = True 
 
 if dict_save:
     print("Saving results...")
