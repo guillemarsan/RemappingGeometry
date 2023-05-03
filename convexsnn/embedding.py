@@ -32,6 +32,9 @@ def get_embedding(dbbox, dinput, input_dir, input_scale, input_amp, D, vect='neu
             noise = np.random.normal(0, 0.25, (dbbox,dinput))
             Q = np.eye(dbbox)
             Basis = Q[:,:dinput] + noise
+        elif vect == 'identity':
+            Q = np.eye(dbbox)
+            Basis = Q[:,:dinput]
         else:
             Basis = np.array(input_dir).reshape((dbbox, dinput))
 
