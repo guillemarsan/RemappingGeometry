@@ -166,9 +166,9 @@ def plot_1danimbbox(x, y, F, G, T, basepath, plotx = False):
 
 def plot_neuroscience(x, y, V, s, t, basepath):
 
-    plt.figure(figsize=(10,10))
+    plt.figure(figsize=(20,10))
     t_ms = t * 1000
-    ax1 = plt.subplot(2, 1, 1)
+    ax1 = plt.subplot(3, 1, 1)
     for i in range(x.shape[0]):
         ax1.plot(t_ms,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_')
     for i in range(y.shape[0]):
@@ -178,19 +178,74 @@ def plot_neuroscience(x, y, V, s, t, basepath):
     ax1.set_xlabel('t(ms)')
 
 
-    ax2 = plt.subplot(2, 1, 2)
-    maxV = np.max(V)
+    ax2 = plt.subplot(3, 1, 2)
     c = plt.rcParams['axes.prop_cycle'].by_key()['color']
     l = 0.3
     off = 0.1
     for i in range(V.shape[0]):
         ax2.plot(t_ms,V[i,:], label='V' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
-        ax2.vlines(t_ms[s[i,:] == 1], maxV + (i+1)*off + i*l, maxV + (i+1)*off + (i+1)*l, color=c[i%10])
     ax2.legend(loc='upper right')
     ax2.set_ylabel('V(mV)')
     ax2.set_xlabel('t(ms)')
 
+    ax3 = plt.subplot(3, 1, 3)
+    for i in range(V.shape[0]):
+        ax3.vlines(t_ms[s[i,:] == 1], (i+1)*off + i*l, (i+1)*off + (i+1)*l, color=c[i%10])
+    ax3.set_ylabel('Neuron')
+    ax3.set_xlabel('t(ms)')
+
     filepath = "%s-neurosc.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+    return plt.gcf()
+
+def plot_pathtrajectory(p, s, t, basepath):
+
+    plt.figure(figsize=(10,10))
+    if p.shape[0] == 1:
+        plt.plot(t,p[0,:],color='black')
+        for i in range(s.shape[0]):
+            t_spikes = np.where(s[i,:])
+            plt.scatter(t[t_spikes],p[0,t_spikes])
+        plt.ylabel('p(m)')
+        plt.xlabel('t(ms)')
+    else:
+        plt.plot(p[0,:],p[1,:],color='black')
+        for i in range(s.shape[0]):
+            t_spikes = np.where(s[i,:])
+            plt.scatter(p[0,t_spikes],p[1,t_spikes])
+        plt.ylabel('p_1(m)')
+        plt.xlabel('p_0(m)')
+    
+
+    filepath = "%s-pathtraj.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+
+    plt.figure(figsize=(10,10))
+    n = s.shape[0]
+    ncols = int(np.sqrt(n))
+    nrows = int(np.ceil(n/ncols))
+    c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    for i in np.arange(n):
+        plt.subplot(nrows, ncols, i+1, aspect='equal')
+
+        plt.title('Neuron %i' % i)
+        if p.shape[0] == 1:
+            plt.plot(t,p[0,:],color='black')
+            t_spikes = np.where(s[i,:])
+            plt.scatter(t[t_spikes],p[0,t_spikes], color=c[i%10])
+            plt.ylabel('p(m)')
+            plt.xlabel('t(ms)')
+        else:
+            plt.plot(p[0,:],p[1,:],color='black')
+            t_spikes = np.where(s[i,:])
+            plt.scatter(p[0,t_spikes],p[1,t_spikes], color=c[i%10])
+            plt.ylabel('p_1(m)')
+            plt.xlabel('p_0(m)')
+        
+
+    plt.tight_layout()
+    filepath = "%s-pathtraj_sep.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
@@ -542,4 +597,34 @@ def plot_violinplot(data, title, labels, basepath):
 
     plt.tight_layout()
     filepath = "%s-scatter.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+def plot_displot(data, xaxis, title, labels, basepath, ground=None, ynormalized=True):
+    plt.figure(figsize=(4,4))
+    ax = plt.gca()
+    for key, res in data.items():
+        
+        mean = np.mean(res, axis=1)
+        err = np.std(res, axis=1)
+        
+        if len(xaxis)-mean.shape[0] > 0:
+            zeros = np.zeros(len(xaxis)-mean.shape[0])
+            mean = np.concatenate((mean, zeros))
+
+        plt.bar(xaxis, mean, width=np.abs(xaxis[1]-xaxis[0]), align='center')
+
+    if ground is not None:
+        plt.plot(ground[0,:], ground[1,:], label='analytical')
+
+    plt.title(title, fontsize=10)
+    plt.xlabel(labels[0], fontsize=10)
+    plt.ylabel(labels[1], fontsize=10)
+    if ynormalized: plt.ylim(0,1.1)
+    plt.tick_params(axis='both', labelsize=10)
+    plt.legend(frameon=False, prop={'size': 10})
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    plt.tight_layout()
+    filepath = "%s-dis_plot.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
