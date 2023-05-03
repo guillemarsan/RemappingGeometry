@@ -61,7 +61,8 @@ class DonutCod():
 class TorusCod():
 
     def codify(self, p, dp, scale=1/2, type='square'):
-
+        
+        dim_pcs = p.shape[0]
         if type == 'rhombus':
             vect1 = np.array([1,0])
             vect2 = np.array([1/2,np.sqrt(3)/2])
@@ -81,32 +82,39 @@ class TorusCod():
         alpha = np.zeros_like(p)
         dalpha = np.zeros_like(p)
         alpha[0,:] = cycles * (pr[0,:] + 1)
-        alpha[1,:] = cycles * (pr[1,:] + 1)
+        if dim_pcs == 2: alpha[1,:] = cycles * (pr[1,:] + 1)
         dalpha[0,:] = cycles * dpr[0,:]
-        dalpha[1,:] = cycles * dpr[1,:]
+        if dim_pcs == 2: dalpha[1,:] = cycles * dpr[1,:]
 
 
         if type == 'square' or 'twisted' or 'rhombus':
 
             time_steps = p.shape[1]
-            x = np.zeros((4,time_steps))
-            dx = np.zeros((4,time_steps))
+            if dim_pcs == 2:
+                x = np.zeros((4,time_steps))
+                dx = np.zeros((4,time_steps))
+            else:
+                x = np.zeros((2,time_steps))
+                dx = np.zeros((2,time_steps))
 
             twist = 1/2 if type == 'twisted' else 0
 
             x[0,:] = np.cos(alpha[0,:])
             x[1,:] = np.sin(alpha[0,:])
-            x[2,:] = np.cos(alpha[1,:] + twist*alpha[0,:])
-            x[3,:] = np.sin(alpha[1,:] + twist*alpha[0,:])
+            if dim_pcs == 2:
+                x[2,:] = np.cos(alpha[1,:] + twist*alpha[0,:])
+                x[3,:] = np.sin(alpha[1,:] + twist*alpha[0,:])
         
             dx[0,:] = -np.sin(alpha[0,:])*dalpha[0,:]
             dx[1,:] = np.cos(alpha[0,:])*dalpha[0,:]
-            dx[2,:] = -np.sin(alpha[1,:] + twist*alpha[0,:])*(dalpha[1,:] + twist*dalpha[0,:])
-            dx[3,:] = np.cos(alpha[1,:] + twist*alpha[0,:])*(dalpha[1,:] + twist*dalpha[0,:])
+            if dim_pcs == 2:
+                dx[2,:] = -np.sin(alpha[1,:] + twist*alpha[0,:])*(dalpha[1,:] + twist*dalpha[0,:])
+                dx[3,:] = np.cos(alpha[1,:] + twist*alpha[0,:])*(dalpha[1,:] + twist*dalpha[0,:])
 
             # Normalize
-            x = 1/np.sqrt(2)*x
-            dx = 1/np.sqrt(2)*dx
+            if dim_pcs == 2:
+                x = 1/np.sqrt(2)*x
+                dx = 1/np.sqrt(2)*dx
 
         elif type == '6D':
 
@@ -138,6 +146,8 @@ class TorusCod():
         return x, dx
 
     def decodify(self, y, scale=1/2, type='square'):
+
+        dim_pcs = y.shape[0]/2
         if scale > 1 or type != 'square':
             #TODO
             raise Exception("Decoding still not implemented")
@@ -147,12 +157,14 @@ class TorusCod():
 
             alpha[0,:] = np.arctan2(y[1,:],y[0,:])
             alpha[0,alpha[0,:] < 0] += 2*np.pi
-            alpha[1,:] = np.arctan2(y[3,:],y[2,:])
-            alpha[1,alpha[1,:] < 0] += 2*np.pi
+            if dim_pcs == 2:
+                alpha[1,:] = np.arctan2(y[3,:],y[2,:])
+                alpha[1,alpha[1,:] < 0] += 2*np.pi
 
             cycles = scale*np.pi
             p_hat[0,:] = alpha[0,:]/cycles - 1
-            p_hat[1,:] = alpha[1,:]/cycles - 1
+            if dim_pcs == 2:
+                p_hat[1,:] = alpha[1,:]/cycles - 1
 
         return p_hat
         
