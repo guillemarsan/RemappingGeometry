@@ -1,251 +1,543 @@
 from operator import ne
 import pathlib, argparse, json, time
-import pickle
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib import colors
 import numpy as np
 import time
 
-from convexsnn.plot import plot_errorplot, plot_scatterplot, plot_violinplot, plot_displot
+from convexsnn.plot import plot_scatterplot, plot_violinplot, plot_displot, plot_errorplot_cond
+
+
+############# PLOTTING ##########################################
+def make_plot(ptype, data, title, axis_labels, basepath, ynormalized=False, equal=False):
+
+    plt.figure(figsize=(4,4))
+    ax = plt.gca()
+
+    if ptype == 'line': 
+        for _, point in data.iterrows():
+            mean = point['mean']
+            err = point['std']
+            xaxis = point['xaxis']
+            legend = point['legend']
+            plt.errorbar(xaxis, mean, err, marker='.', capsize=3, label=legend)
+    
+    elif ptype == 'hist':
+        for _, point in data.iterrows():
+            hist = point['hist']
+            bins = point['bins']
+            legend = point['legend']
+
+            widths = np.diff(bins)
+            xticks = bins[:-1] + widths/2
+            plt.bar(xticks, hist, width=widths, align='center', label=legend)
+
+    elif ptype == 'bars':
+        i = 1
+        conditions = []
+        for _, point in data.iterrows():
+            data = point['data']
+            mean = np.mean(data)
+            std = np.std(data)
+            datashuff = point['datashuff']
+            meanshuff = np.mean(datashuff)
+            conditions.append(point['legend'])
+
+            plt.bar(i, mean, width=0.5, align='center')
+            plt.errorbar(i, mean, std)
+            plt.hlines(meanshuff, i-0.1, i+0.1, colors='r')
+            i += 1
+
+        plt.xticks(np.arange(i-1)+1, conditions)
+
+    elif ptype == 'scatter':
+        for _, point in data.iterrows():
+            data = point['data']
+            datashuff = point['datashuff']
+
+            
+            plt.scatter(data[:,0],data[:,1], label='Pairs')
+            plt.scatter(datashuff[:,0], datashuff[:,1], label='Shuffle')
+
+        plt.xlim(0,1.1)
+
+    elif ptype == 'pfs':
+
+        c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        cases = len(data)
+        i = 1
+        for _, point in data.iterrows():
+            pfs = point['pfs']
+
+            axsub = plt.subplot(1, cases, i)
+            axsub.set_title(point['legend'])
+            axsub.set_xticks([])
+            axsub.set_yticks([])
+
+            maxFR = np.max(pfs)
+            for cell in np.arange(pfs.shape[0]):
+
+                cmap = colors.ListedColormap(['white', c[cell]])
+                bounds=[0,0,maxFR]
+                norm = colors.BoundaryNorm(bounds, cmap.N)
+
+                pf = pfs[cell,:]
+                sqrtb = int(np.sqrt(pfs.shape[1]))
+                pf = pf.reshape((sqrtb,sqrtb))
+                alphas = pf/np.max(pf) if np.max(pf) > 0 else 0
+                axsub.imshow(pf, alpha=alphas, cmap=cmap, norm=norm)
+            i += 1
+
+
+    if ptype != 'pfs':
+        plt.title(title, fontsize=10)
+        plt.xlabel(axis_labels[0], fontsize=10)
+        plt.ylabel(axis_labels[1], fontsize=10)
+        if ynormalized: plt.ylim(0,1.1)
+        if equal: plt.gca().set_aspect('equal')    
+        plt.tick_params(axis='both', labelsize=10)
+        plt.legend(frameon=False, prop={'size': 10})
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+    
+
+    plt.tight_layout()
+    filepath = "{0}-{1}_plot.png".format(basepath,ptype)
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+
+############# LOADING AND PREPARING DATA ########################
+def load_dataframe(keyname, basepath):
+
+    patt = "*-%s_df.csv" % keyname
+    path = pathlib.Path(basepath)
+    results_files = path.rglob(patt)
+    no_load = False
+    try:
+        file = next(results_files)
+    except StopIteration:
+        no_load = True
+
+    if no_load:
+        df = pd.DataFrame()
+    else:
+        old_file_name = str(file)
+        with open(old_file_name, 'rb') as f:
+            df = pd.read_csv(f, index_col=[0])
+
+    return df
+
+def filter(df, visualize, params_sweep, tags):
+
+    full_keys = []
+    full_keys.extend(visualize)
+    for t in tags:
+        full_keys.append(t)
+
+    filteredf = pd.DataFrame()
+    for tuple in params_sweep:
+        points = df[(df[visualize] == tuple).all(1)]
+        if len(points.index) > 0:
+            filteredf = pd.concat([filteredf, points[full_keys]])
+    return filteredf
+
+def prepare_single(df, labelsin, labelsout, labelsparams, visualize):
+
+    newdf = pd.DataFrame([])
+    for _, point in df.iterrows():
+        newpoint = {}
+        for i in np.arange(len(labelsin)):
+            value = point[labelsin[i]]
+            if type(value) is str and value.startswith('['):
+                newpoint[labelsout[i]] = [np.array(eval(point[labelsin[i]]))]
+            else:
+                newpoint[labelsout[i]] = value
+        legend = ''
+        i = 0
+        for l_idx, l in enumerate(labelsparams):
+            legend += l + '=' + str(point[visualize[i]])
+            legend += ', ' if l_idx != len(labelsparams)-1 else ''
+            i += 1
+        newpoint['legend'] = legend
+        newdf = pd.concat([newdf, pd.DataFrame(newpoint)])
+    return newdf  
+
+def prepare_combine(df, across, data_label, xaxis_label):
+    def combinelambda(set):
+        points = pd.DataFrame([])
+        for dlabel in data_label:
+            newpoint = {}
+            list = set[dlabel]
+            list = list.apply(lambda x: np.array(eval(x)))
+
+            if across:
+                means = np.mean(list._values)
+                stds = np.std(list._values)
+                xaxis = np.array(eval(set.iloc[0][xaxis_label]))
+            else:
+                means = []
+                stds = []
+                xaxis = []
+                i = 0
+                for elem in list._values:
+                    means.append(np.mean(elem))
+                    stds.append(np.std(elem))
+                    xaxis.append(set.iloc[i][xaxis_label])
+                    i += 1
+            newpoint['mean'] = [means]
+            newpoint['std'] = [stds]
+            newpoint['xaxis'] = [xaxis]
+
+            legend = ''
+            i = 0
+            for l_idx, l in enumerate(labels):
+                legend += l + '=' + str(set.iloc[0][visualize[i]])
+                legend += ', ' if l_idx != len(labels)-1 else ''
+                i += 1
+            legend += (', ' + dlabel) if len(data_label) > 1 else ''
+            newpoint['legend'] = legend
+
+            points = pd.concat([points, pd.DataFrame(newpoint)])
+        return points
+
+    # Mean and std within points and combine
+    gb= df.groupby(visualize, as_index=False)
+    newdf = gb.apply(lambda x: combinelambda(x))
+    return newdf 
+
+def prepare_pfs(df, visualize, labels):
+
+    # Read the pfs
+    newdf = pd.DataFrame([])
+    i = 0
+    for _, row in df.iterrows():
+        newpoint = row[visualize]
+        with open(row['pfs']) as res_file:
+            t0 = time.time()
+            pfs = np.genfromtxt(res_file)
+            t1 = time.time()
+            print(t1-t0)
+        newpoint['pfs'] = pfs[neurons, :]
+       
+        legend = ''
+        j = 0
+        for l_idx, l in enumerate(labels):
+            legend += l + '=' + str(row[visualize[j]])
+            legend += ', ' if l_idx != len(labels)-1 else ''
+            j += 1
+        newpoint['legend'] = legend
+
+        newdf = pd.concat([newdf, pd.DataFrame([newpoint])])
+        i += 1
+
+    return newdf
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=2,
-                        help="Dimensionality of inputs")
-    parser.add_argument("--num_dims", type=int, default=0,
-                        help="Number of dimensions")
-    parser.add_argument("--num_reds", type=int, default=0,
-                        help="Number of redundancies")                   
-    parser.add_argument("--num_dirs", type=int, default=6,
-                        help="Number of input directions")
-    parser.add_argument("--num_loadids", type=int, default=3,
-                        help="Number of bbox loadids used")
-    parser.add_argument('--dim_vect', nargs='+', type=int, default=[4],
-                        help="Dimension of the bbox")
-    parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
-                        help="Redundancy of the bbox")
-    parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
-                        help="Direction of the input vector")
-    parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
-                        help="LoadID of the bbox vector")
-    parser.add_argument("--read_dir", type=str, default='./data/DBTorusPCS',
-                        help="Directory to read files")
-    parser.add_argument("--write_dir", type=str, default='./out/',
-                        help="Directory to dump output")
-    parser.add_argument("--plot", type=str, default='spatialinfo',
+    parser.add_argument("--dir", type=str, default='NormalizedMiliTorusPCS2',
+                        help="Directory to read and write files")
+    parser.add_argument("--plot", type=str, default='placefields',
                         help = 'Which plot to make')
-    parser.add_argument('--tags', nargs='+', type=str, default=[''],
-                        help="Conditions to plot")
+    
+
     args = parser.parse_args()
 
 plot = args.plot
 
-dim_vect = 2**(np.arange(args.num_dims)+2) if args.num_dims != 0 else np.array(args.dim_vect)
-num_dims = dim_vect.shape[0]
-red_vect = 2**(np.arange(args.num_reds)+2) if args.num_reds != 0 else np.array(args.red_vect)
-num_reds = red_vect.shape[0]
-dir_vect = np.arange(args.num_dirs) if args.num_dirs != 0 else np.array(args.dir_vect)
-num_dirs = dir_vect.shape[0]
-loadid_vect = np.arange(args.num_loadids) if args.num_loadids != 0 else np.array(args.loadid_vect)
-num_loadid = loadid_vect.shape[0]
-tags_vect = args.tags
-
 timestr = time.strftime("%Y%m%d-%H%M%S")
-name = "pcs-" + str(args.dim_pcs)
-basepath = args.write_dir + timestr + "-" + name
-
+basepath = './data/' + args.dir + '/'
+name = basepath +  timestr + '-' + args.dir + '-' + plot
+    
 print("Loading results...")
 
-patt = "*-%s_dict.pkl" % plot
-path = pathlib.Path(args.read_dir + str(args.dim_pcs))
-results_files = sorted(path.rglob(patt))
-file = results_files[-1]
-file_name = str(file)
-with open(file_name, 'rb') as f:
-    dict = pickle.load(f)
-
-# Filtering results to plot
-if plot in {'perpcs', 'npcs', 'maxfr', 'meanfr', 'maxsize', 'meansize', 'reparea', 'meanfrcorr','spatialoverlap', 'tracking_error'}:
-
-    allowed_keys = []
-    for red in red_vect:
-        for tag in tags_vect:
-            if tag != '': allowed_keys.append(tag + ", redun = " + str(red))
-            else: allowed_keys.append("redun = " + str(red))
-
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
-
-elif plot in {'nrooms', 'diffs', 'rank_increase'}:
-
-    allowed_keys = []
-    for red in red_vect:
-        for dim in dim_vect:
-            neu = red*dim
-            for tag in tags_vect:
-                if tag != '': allowed_keys.append(tag + ', d,n = ' + str(dim) + "," + str(neu))
-                else: allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
-
-elif plot in {'nrooms_pfsize', 'nrooms_meanfr'}:
-
-    allowed_keys = []
-    red = red_vect[0]
-    dim = dim_vect[0]
-    neu = red*dim
-    for loadid in loadid_vect:
-        for tag in tags_vect:
-            if tag != '': allowed_keys.append(tag + ', d,n = ' + str(dim) + "," + str(neu) + ",l = " + str(loadid))
-            else: allowed_keys.append('d,n = ' + str(dim) + "," + str(neu) + ",l = " + str(loadid))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
-
+# Load DataFrame
+if plot in {'placefields'}:
+    df = load_dataframe('database', basepath)
 elif plot in {'spatialinfo'}:
-
-    allowed_keys = []
-    red = red_vect[0]
-    dim = dim_vect[0]
-    dir = dir_vect[0]
-    loadid = loadid_vect[0]
-    neu = red*dim
-    for tag in tags_vect:
-        if tag != '': allowed_keys.append(tag + ', ' + 'd = ' + str(dim) + ", n =" + str(neu) + ", dir =" + str(dir) + ", l =" + str(loadid))
-        else: allowed_keys.append('d = ' + str(dim) + ", n =" + str(neu) + ", dir =" + str(dir) + ", l =" + str(loadid))
-    dict2 = {}
-    for key, value in dict.items():
-        if key in allowed_keys:
-            dict2[key] = value
+    df = load_dataframe('placecells', basepath)
+elif plot in {'nrooms', 'overlap', 'spatialcorr', 'variance_remap', 'multispatialcorr'}:
+    df = load_dataframe('remapping', basepath)
+else:
+    df = load_dataframe('recruitment', basepath)
 
 # Plotting
 print ("Plotting results...")
-if plot == 'perpcs':
 
-    title = 'Percentage of place cells'
-    xaxis = dict['xaxis']
-    labels = ['Embedding dimension', 'Percentage of place cells (%)'] 
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath)
+#### General plots ################
 
-if plot == 'npcs':
+if plot == 'placefields':
 
-    title = 'Number of place cells'
-    xaxis = dict['xaxis']
-    labels = ['Dimension', 'Number of place cells'] 
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
-
-elif plot == 'nrooms':
-
-    title = 'Percentage of neurons active in n rooms'
-    xaxis = dict['xaxis']
-    labels = ['Number of rooms', 'Percentage of PCs']
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath)
-
-elif plot == 'rank_increase':
-
-    title = 'Increase of dimensionality with environments'
-    xaxis = dict['xaxis']
-    labels = ['Number of rooms', 'Dimensionality']
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
-
-elif plot == 'diffs':
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'l', 'dir']
+    params_sweep = [(4,64,0,'[0.0]'), (4,64,1,'[0.0]')]
+    tags = ['pfs']
+    neurons = np.array([2, 3, 4, 5])
     
-    title = 'Relationship between angle in embeddings and active cells'
-    labels = ['Angle in embedding', 'Angle in active cells']
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_pfs(df, visualize, labels)
+
+    title = ''
+    axis_labels = []
     print("Plotting results...")
-    plot_scatterplot(dict2, title, labels, basepath)
+    make_plot('pfs', newdf, title, axis_labels, name)
 
-elif plot == 'maxfr':
 
-    title = 'Maximum firing rate'
-    xaxis = dict['xaxis']
-    labels = ['Dimension', 'Max FR'] 
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
 
-elif plot == 'meanfr':
-
-    title = 'Mean firing rate'
-    xaxis = dict['xaxis']
-    labels = ['Dimension', 'Mean FR'] 
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
-
+#### Place cell plots #############
 elif plot == 'spatialinfo':
 
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'l', 'dir']
+    params_sweep = [(4,64,0,'[0.0]')]
+    tags = ['spatialinfo', 'spatialinfo_bins']
+
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(df, tags,['hist','bins'], labels, visualize)
+    
+
     title = 'Spatial information distribution'
-    xaxis = dict['xaxis']
-    labels = ['Spatial information (bits/s)', 'Percentage of neurons']
+    axis_labels = ['Spatial information (bits/s)', 'Percentage of neurons']
     print("Plotting results...")
-    plot_displot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+    make_plot('hist', newdf, title, axis_labels, name, ynormalized=False)
 
-elif plot == 'maxsize':
+#### Remapping plots #############
+elif plot == 'nrooms':
 
-    title = 'Maximum place field size'
-    xaxis = dict['xaxis']
-    labels = ['Dimension', 'Max PF size ($cm^2$)'] 
+    visualize = ['arg_dim_bbox','arg_nb_neurons']
+    labels = ['d', 'n']
+    params_sweep = [(4,64),(8,128)]
+    tags = ['nrooms', 'nrooms_bins']
+
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_combine(df, across=True, data_label='nrooms', xaxis_label='nrooms_bins')
+
+    title = 'Percentage of neurons active in n rooms'
+    axis_labels = ['Number of rooms', 'Percentage of PCs']
     print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=False)
 
-elif plot == 'meansize':
+elif plot == 'overlap':
 
-    title = 'Mean place field size'
-    xaxis = dict['xaxis']
-    labels = ['Embedding dimension', 'Mean PF size ($cm^2$)'] 
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    labels = ['d', 'n', 'l']
+    params_sweep = [(4,64,0), (8,128,1)]
+    tags = ['overlap', 'overlapshuff']
 
-elif plot == 'reparea':
-
-    title = 'Area represented by the place cells'
-    xaxis = dict['xaxis']
-    labels = ['Dimension', 'Represented area'] 
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath)
-
-elif plot == 'meanfrcorr':
-
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(df, tags,['data','datashuff'], labels, visualize)
+    
     title = 'Mean FR correlation of place cells across environments'
-    xaxis = dict['xaxis']
-    labels = ['Dimension', 'Mean FR correlation (cosine of angle)'] 
+    axis_labels = ['Condition', 'Mean FR correlation (cosine of angle)'] 
     print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath)
+    make_plot('bars', newdf, title, axis_labels, name, ynormalized=True)
 
-elif plot == 'spatialoverlap':
+elif plot == 'spatialcorr':
 
-    title = 'Spatial overlap of place cells across environments'
-    xaxis = dict['xaxis']
-    labels = ['Dimension', 'Spatial overlap (cosine of angle)'] 
-    print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath)
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    labels = ['d', 'n', 'l']
+    params_sweep = [(4,64,0), (8,128,1)]
+    tags = ['spatialcorr', 'spatialcorrshuff']
 
-elif plot == 'nrooms_pfsize':
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(df, tags,['data','datashuff'], labels, visualize)
     
-    title = 'Relationship between number of rooms and mean pf size'
-    labels = ['Number of rooms', 'Mean pf size ($cm^2$)']
+    title = 'Mean FR correlation of place cells across environments'
+    axis_labels = ['Condition', 'Mean FR correlation (cosine of angle)'] 
     print("Plotting results...")
-    plot_violinplot(dict2, title, labels, basepath)
+    make_plot('bars', newdf, title, axis_labels, name, ynormalized=True)
 
-elif plot == 'nrooms_meanfr':
-    
-    title = 'Relationship between number of rooms and mean firing rate'
-    labels = ['Number of rooms', 'Mean FR']
-    print("Plotting results...")
-    plot_violinplot(dict2, title, labels, basepath)
+elif plot == 'variance_remap':
 
-elif plot == 'tracking_error':
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    labels = ['d', 'n', 'l']
+    params_sweep = [(4,64,0), (4,64,1)]
+    tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff']
+
+    df = filter(df, visualize, params_sweep, tags)
+
+    # Xaxis variable
+    xaxis = 'arg_load_id'
+    xaxislabel = 'l'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(df, across=False, data_label=tags, xaxis_label=xaxis)
     
-    title = 'Tracking error'
-    xaxis = dict['xaxis']
-    labels = ['Dimension', 'Mean distance']
+    title = 'Overlap and spatial correlation per embedding variance'
+    axis_labels = ['Variance', 'Metric'] 
     print("Plotting results...")
-    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=True)
+
+elif plot == 'multispatialcorr':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    labels = ['d', 'n', 'l']
+    params_sweep = [(4,64,0)]
+    tags = ['multispatialcorr', 'multispatialcorrshuff']
+
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(df, tags,['data','datashuff'], labels, visualize)
+    
+    title = 'Pair of cells spatial correlation in two environements'
+    axis_labels = ['Environment 1', 'Environment 2'] 
+    print("Plotting results...")
+    make_plot('scatter', newdf, title, axis_labels, name, ynormalized=True, equal=True)
+
+#### Recruitment plots #############
+
+elif plot == 'meanfr_perclass':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'I']
+    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    tags = ['meanfr_permanent', 'meanfr_tagged', 'meanfr_recruited', 'meanfr_silent']
+
+    df = filter(df, visualize, params_sweep, tags)
+
+     # Xaxis variable
+    xaxis = 'arg_load_id'
+    xaxislabel = 'I'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(df, across=False, data_label=tags, xaxis_label=xaxis)
+
+    title = 'Mean FR per class'
+    axis_labels = ['Inhibition current', 'Mean FR (Hz)',]
+    print("Plotting results...")
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=False)
+
+elif plot == 'decoding_error':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'I']
+    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    tags = ['decoding_error']
+
+    df = filter(df, visualize, params_sweep, tags)
+
+     # Xaxis variable
+    xaxis = 'arg_load_id'
+    xaxislabel = 'I'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(df, across=False, data_label=tags, xaxis_label=xaxis)
+
+    title = 'Decoding error with Inhibition'
+    axis_labels = ['Inhibition current', 'Decoding error']
+    print("Plotting results...")
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=False)
+
+elif plot == 'fr':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'I']
+    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    tags = ['meanfr', 'maxfr']
+
+    df = filter(df, visualize, params_sweep, tags)
+
+     # Xaxis variable
+    xaxis = 'arg_load_id'
+    xaxislabel = 'I'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(df, across=False, data_label=tags, xaxis_label=xaxis)
+
+    title = 'Global FR with Inhibition'
+    axis_labels = ['Inhibition current', 'FR (Hz)']
+    print("Plotting results...")
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=False)
+
+elif plot == 'pfsize':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'I']
+    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    tags = ['pfsize']
+
+    df = filter(df, visualize, params_sweep, tags)
+
+     # Xaxis variable
+    xaxis = 'arg_load_id'
+    xaxislabel = 'I'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(df, across=False, data_label=tags, xaxis_label=xaxis)
+
+    title = 'Place field size with Inhibition'
+    axis_labels = ['Inhibition current', 'Place field size (m2)']
+    print("Plotting results...")
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=False)
+
+elif plot == 'pfsize_perclass':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'I']
+    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    tags = ['pfsize_permanent', 'pfsize_tagged','pfsize_recruited','pfsize_silent']
+
+    df = filter(df, visualize, params_sweep, tags)
+
+     # Xaxis variable
+    xaxis = 'arg_load_id'
+    xaxislabel = 'I'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(df, across=False, data_label=tags, xaxis_label=xaxis)
+
+    title = 'Place field size per class with Inhibition'
+    axis_labels = ['Inhibition current', 'Place field size (m2)']
+    print("Plotting results...")
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=False)
+
+elif plot == 'perpcs_perclass':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'I']
+    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    tags = ['perpcs_permanent', 'perpcs_tagged','perpcs_recruited','perpcs_silent']
+
+    df = filter(df, visualize, params_sweep, tags)
+
+     # Xaxis variable
+    xaxis = 'arg_load_id'
+    xaxislabel = 'I'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(df, across=False, data_label=tags, xaxis_label=xaxis)
+
+    title = 'Proportion of PCs in each class with Inhibition'
+    axis_labels = ['Inhibition current', 'Proportion']
+    print("Plotting results...")
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=False)
+
+elif plot == 'coveredarea_perclass':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    labels = ['d', 'n', 'I']
+    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    tags = ['coveredarea', 'coveredarea_permanent', 'coveredarea_tagged','coveredarea_recruited','coveredarea_silent']
+
+    df = filter(df, visualize, params_sweep, tags)
+
+     # Xaxis variable
+    xaxis = 'arg_load_id'
+    xaxislabel = 'I'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(df, across=False, data_label=tags, xaxis_label=xaxis)
+
+    title = 'Decoding error with Inhibition'
+    axis_labels = ['Inhibition current', 'Place field size (m2)']
+    print("Plotting results...")
+    make_plot('line', newdf, title, axis_labels, name, ynormalized=True)

@@ -1,0 +1,265 @@
+from operator import ne
+import pathlib, argparse, json, time
+import pickle
+import numpy as np
+import time
+
+from convexsnn.plot import plot_errorplot, plot_scatterplot, plot_violinplot, plot_displot, plot_errorplot_cond
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser("Simulation of one point")
+    parser.add_argument("--dim_pcs", type=int, default=2,
+                        help="Dimensionality of inputs")
+    parser.add_argument("--num_dims", type=int, default=0,
+                        help="Number of dimensions")
+    parser.add_argument("--num_reds", type=int, default=0,
+                        help="Number of redundancies")                   
+    parser.add_argument("--num_dirs", type=int, default=6,
+                        help="Number of input directions")
+    parser.add_argument("--num_loadids", type=int, default=3,
+                        help="Number of bbox loadids used")
+    parser.add_argument('--dim_vect', nargs='+', type=int, default=[4],
+                        help="Dimension of the bbox")
+    parser.add_argument('--red_vect', nargs='+', type=int, default=[16],
+                        help="Redundancy of the bbox")
+    parser.add_argument('--dir_vect', nargs='+', type=int, default=[0],
+                        help="Direction of the input vector")
+    parser.add_argument('--loadid_vect', nargs='+', type=int, default=[0],
+                        help="LoadID of the bbox vector")
+    parser.add_argument("--read_dir", type=str, default='./data/NormalizedMiliTorusPCS',
+                        help="Directory to read files")
+    parser.add_argument("--write_dir", type=str, default='./out/',
+                        help="Directory to dump output")
+    parser.add_argument("--plot", type=str, default='spatialoverlap',
+                        help = 'Which plot to make')
+    parser.add_argument('--tags', nargs='+', type=str, default=['condA','condB','shuffle'],
+                        help="Conditions to plot")
+    parser.add_argument('--per_cond', action='store_true', default=True,
+                        help="Show the plots with xaxis being each condition")
+    args = parser.parse_args()
+
+plot = args.plot
+
+dim_vect = 2**(np.arange(args.num_dims)+2) if args.num_dims != 0 else np.array(args.dim_vect)
+num_dims = dim_vect.shape[0]
+red_vect = 2**(np.arange(args.num_reds)+2) if args.num_reds != 0 else np.array(args.red_vect)
+num_reds = red_vect.shape[0]
+dir_vect = np.arange(args.num_dirs) if args.num_dirs != 0 else np.array(args.dir_vect)
+num_dirs = dir_vect.shape[0]
+loadid_vect = np.arange(args.num_loadids) if args.num_loadids != 0 else np.array(args.loadid_vect)
+num_loadid = loadid_vect.shape[0]
+tags_vect = args.tags
+
+timestr = time.strftime("%Y%m%d-%H%M%S")
+name = "pcs-" + str(args.dim_pcs)
+basepath = args.write_dir + timestr + "-" + name
+
+print("Loading results...")
+
+patt = "*-%s_dict.pkl" % plot
+path = pathlib.Path(args.read_dir + str(args.dim_pcs))
+results_files = sorted(path.rglob(patt))
+file = results_files[-1]
+file_name = str(file)
+with open(file_name, 'rb') as f:
+    dict = pickle.load(f)
+
+# Filtering results to plot
+if plot in {'perpcs', 'npcs', 'maxfr', 'meanfr', 'maxsize', 'meansize', 'reparea', 'meanfrcorr','spatialoverlap', 'tracking_error'}:
+
+    allowed_keys = []
+    for red in red_vect:
+        for tag in tags_vect:
+            if tag != '': allowed_keys.append(tag + ", redun = " + str(red))
+            else: allowed_keys.append("redun = " + str(red))
+
+    dict2 = {}
+    for key, value in dict.items():
+        if key in allowed_keys:
+            dict2[key] = value
+
+elif plot in {'nrooms', 'diffs', 'rank_increase'}:
+
+    allowed_keys = []
+    for red in red_vect:
+        for dim in dim_vect:
+            neu = red*dim
+            for tag in tags_vect:
+                if tag != '': allowed_keys.append(tag + ', d,n = ' + str(dim) + "," + str(neu))
+                else: allowed_keys.append('d,n = ' + str(dim) + "," + str(neu))
+    dict2 = {}
+    for key, value in dict.items():
+        if key in allowed_keys:
+            dict2[key] = value
+
+elif plot in {'nrooms_pfsize', 'nrooms_meanfr'}:
+
+    allowed_keys = []
+    red = red_vect[0]
+    dim = dim_vect[0]
+    neu = red*dim
+    for loadid in loadid_vect:
+        for tag in tags_vect:
+            if tag != '': allowed_keys.append(tag + ', d,n = ' + str(dim) + "," + str(neu) + ",l = " + str(loadid))
+            else: allowed_keys.append('d,n = ' + str(dim) + "," + str(neu) + ",l = " + str(loadid))
+    dict2 = {}
+    for key, value in dict.items():
+        if key in allowed_keys:
+            dict2[key] = value
+
+elif plot in {'spatialinfo'}:
+
+    allowed_keys = []
+    red = red_vect[0]
+    dim = dim_vect[0]
+    dir = dir_vect[0]
+    loadid = loadid_vect[0]
+    neu = red*dim
+    for tag in tags_vect:
+        if tag != '': allowed_keys.append(tag + ', ' + 'd = ' + str(dim) + ", n =" + str(neu) + ", dir =" + str(dir) + ", l =" + str(loadid))
+        else: allowed_keys.append('d = ' + str(dim) + ", n =" + str(neu) + ", dir =" + str(dir) + ", l =" + str(loadid))
+    dict2 = {}
+    for key, value in dict.items():
+        if key in allowed_keys:
+            dict2[key] = value
+
+# Plotting
+print ("Plotting results...")
+if plot == 'perpcs':
+
+    title = 'Percentage of place cells'
+    xaxis = dict['xaxis']
+    labels = ['Embedding dimension', 'Percentage of place cells (%)'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath)
+
+if plot == 'npcs':
+
+    title = 'Number of place cells'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Number of place cells'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'nrooms':
+
+    title = 'Percentage of neurons active in n rooms'
+    xaxis = dict['xaxis']
+    labels = ['Number of rooms', 'Percentage of PCs']
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath)
+
+elif plot == 'rank_increase':
+
+    title = 'Increase of dimensionality with environments'
+    xaxis = dict['xaxis']
+    labels = ['Number of rooms', 'Dimensionality']
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'diffs':
+    
+    title = 'Relationship between angle in embeddings and active cells'
+    labels = ['Angle in embedding', 'Angle in active cells']
+    print("Plotting results...")
+    plot_scatterplot(dict2, title, labels, basepath)
+
+elif plot == 'maxfr':
+
+    title = 'Maximum firing rate'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Max FR'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'meanfr':
+
+    title = 'Mean firing rate'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Mean FR'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'spatialinfo':
+
+    title = 'Spatial information distribution'
+    xaxis = dict['xaxis']
+    labels = ['Spatial information (bits/s)', 'Percentage of neurons']
+    print("Plotting results...")
+    plot_displot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'maxsize':
+
+    title = 'Maximum place field size'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Max PF size ($cm^2$)'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'meansize':
+
+    title = 'Mean place field size'
+    xaxis = dict['xaxis']
+    labels = ['Embedding dimension', 'Mean PF size ($cm^2$)'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
+
+elif plot == 'reparea':
+
+    title = 'Area represented by the place cells'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Represented area'] 
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath)
+
+elif plot == 'meanfrcorr':
+
+    title = 'Mean FR correlation of place cells across environments'
+    if not args.per_cond:
+        xaxis = dict['xaxis']
+        labels = ['Dimension', 'Mean FR correlation (cosine of angle)'] 
+        print("Plotting results...")
+        plot_errorplot(dict2, xaxis, title, labels, basepath)
+    else:
+        labels = ['Condition', 'Mean FR correlation (cosine of angle)'] 
+        print("Plotting results...")
+        plot_errorplot_cond(dict2, tags_vect, title, labels, basepath, ground='shuffle')
+
+
+elif plot == 'spatialoverlap':
+
+    title = 'Spatial overlap of place cells across environments'
+    if not args.per_cond:
+        xaxis = dict['xaxis']
+        labels = ['Dimension', 'Spatial overlap (cosine of angle)'] 
+        print("Plotting results...")
+        plot_errorplot(dict2, xaxis, title, labels, basepath)
+    else:
+        labels = ['Condition', 'Mean FR correlation (cosine of angle)'] 
+        print("Plotting results...")
+        plot_errorplot_cond(dict2, tags_vect, title, labels, basepath, ground='shuffle')
+
+
+elif plot == 'nrooms_pfsize':
+    
+    title = 'Relationship between number of rooms and mean pf size'
+    labels = ['Number of rooms', 'Mean pf size ($cm^2$)']
+    print("Plotting results...")
+    plot_violinplot(dict2, title, labels, basepath)
+
+elif plot == 'nrooms_meanfr':
+    
+    title = 'Relationship between number of rooms and mean firing rate'
+    labels = ['Number of rooms', 'Mean FR']
+    print("Plotting results...")
+    plot_violinplot(dict2, title, labels, basepath)
+
+elif plot == 'tracking_error':
+    
+    title = 'Tracking error'
+    xaxis = dict['xaxis']
+    labels = ['Dimension', 'Mean distance']
+    print("Plotting results...")
+    plot_errorplot(dict2, xaxis, title, labels, basepath, ynormalized=False)
