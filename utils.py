@@ -1,8 +1,8 @@
 import numpy as np
-import scipy
+from scipy import ndimage 
 
 def compute_meshgrid(radius, num_bins):
-    radius = 1
+
     row_col = int(np.sqrt(num_bins))
     step = 2*radius/row_col
     
@@ -11,22 +11,28 @@ def compute_meshgrid(radius, num_bins):
 
     return ppts
 
-def compute_ratemap(path, spikes, dt, bins):
-
+def compute_pathloc(path, dt, time_steps, bins):
     num_bins = bins.shape[1]
     step = np.abs(np.sum(bins[:,0]-bins[:,1])/2)
-    sums = np.zeros(num_bins)
+    pathloc = np.zeros((num_bins,time_steps))
     for j in np.arange(num_bins):
         dist = np.max(np.abs(np.expand_dims(bins[:,j],-1)-path), axis=0) # Manhattan distance
-        consider = np.argwhere(dist < step)
-        sums[j] = np.sum(spikes[consider])/(consider.size*dt) if consider.size != 0 else 0
-    return sums
+        pathloc[j,np.argwhere(dist < step)] = 1
+    return pathloc.astype(int)
+
+def compute_ratemap(spikes, pathloc, tb):
+
+    num_bins = tb.size
+    ratemap = np.zeros(num_bins)
+    for j in np.arange(num_bins):
+        ratemap[j] = np.sum(spikes[pathloc[j,:].astype(bool)])/tb[j] if tb[j] != 0 else 0
+    return ratemap
 
 def compute_pf(ratemap, bins):
     rows = int(np.sqrt(bins.shape[1]))
 
     ratemap_square = np.reshape(ratemap, (rows,rows))
-    smoothed = scipy.ndimage.gaussian_filter(ratemap_square, sigma=1)
+    smoothed = ndimage.gaussian_filter(ratemap_square, sigma=1)
 
     maxfr = np.max(smoothed)
     smoothed_cutoff = smoothed.copy()
@@ -35,11 +41,11 @@ def compute_pf(ratemap, bins):
 
     minpf = 0.4 # Min pf size in m 0.15 => 225cm2
     side = round(np.abs(np.sum(bins[:,0]-bins[:,1])),7)
-    minbins = int(minpf/side)
+    minbins = int(minpf/side)**2
     structure = np.ones((3, 3), dtype=np.int)
 
     
-    labeled, ncomponents = scipy.ndimage.measurements.label(smoothed_cutoff>0, structure)
+    labeled, ncomponents = ndimage.measurements.label(smoothed_cutoff>0, structure)
     
 
     for com in np.arange(ncomponents):
