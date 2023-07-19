@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.animation as animation
@@ -154,8 +155,8 @@ def plot_1danimbbox(x, y, F, G, T, basepath, plotx = False):
         ax.clear()
         f = i*step
         plot_1dbbox(x[:,f], np.expand_dims(y[:,f],-1), F, G, T, basepath, plotx, foranim=True)
-        plt.xlim(minx, maxx)
-        plt.ylim(miny, maxy)
+        plt.xlim(minx-0.3, maxx)
+        plt.ylim(miny-0.3, maxy)
         return ax 
         
     ani = animation.FuncAnimation(fig, animate, frames=fr)
@@ -164,110 +165,161 @@ def plot_1danimbbox(x, y, F, G, T, basepath, plotx = False):
     ani.save(filepath, fps=int(fr/10))         
     return ani
 
-def plot_neuroscience(x, y, V, s, t, basepath):
+def plot_neuroscience(x, y, V, s, t, basepath, n_vect, T=None):
 
     plt.figure(figsize=(20,10))
+    matplotlib.rcParams.update({'font.size': 22})
     t_ms = t * 1000
     ax1 = plt.subplot(3, 1, 1)
-    for i in range(x.shape[0]):
-        ax1.plot(t_ms,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_')
     for i in range(y.shape[0]):
         ax1.plot(t_ms,y[i,:], label='y' + str(i) if i < 16 else '_nolegend_')
+    for i in range(x.shape[0]):
+        ax1.plot(t_ms,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_')
     ax1.legend(loc='upper right')
-    ax1.set_ylabel('x,y(mV)')
-    ax1.set_xlabel('t(ms)')
+    ax1.set_ylabel('Input x')
+    ax1.set_xlabel('Time(s)')
 
 
     ax2 = plt.subplot(3, 1, 2)
-    c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    #c = plt.rcParams['axes.prop_cycle'].by_key()['color'] # color=c[i%10]
+    jet = cm = plt.get_cmap('hsv') 
+    cNorm  = colors.Normalize(vmin=0, vmax=n_vect.shape[0])
+    c = matplotlib.cm.ScalarMappable(norm=cNorm, cmap=jet)
     l = 0.3
     off = 0.1
-    for i in range(V.shape[0]):
-        ax2.plot(t_ms,V[i,:], label='V' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
+    for i in range(n_vect.shape[0]):
+        ax2.plot(t_ms,V[n_vect[i],:], label='V' + str(n_vect[i]) if i < 16 else '_nolegend_', color=c.to_rgba(i))
+    if T is not None:
+        ax2.plot(t_ms,T*np.ones_like(t_ms),'k--')
     ax2.legend(loc='upper right')
     ax2.set_ylabel('V(mV)')
     ax2.set_xlabel('t(ms)')
 
     ax3 = plt.subplot(3, 1, 3)
-    for i in range(V.shape[0]):
-        ax3.vlines(t_ms[s[i,:] == 1], (i+1)*off + i*l, (i+1)*off + (i+1)*l, color=c[i%10])
-    ax3.set_ylabel('Neuron')
+    for i in range(n_vect.shape[0]):
+        ax3.vlines(t_ms[s[n_vect[i],:] == 1], (i+1)*off + i*l, (i+1)*off + (i+1)*l, color=c.to_rgba(i))
+    ax3.set_ylabel('Trial 1')
     ax3.set_xlabel('t(ms)')
 
-    filepath = "%s-neurosc.png" % basepath
+    filepath = "%s-neurosc.svg" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
-def plot_pathtrajectory(p, s, t, basepath):
+def plot_pathtrajectory(p, s, t, basepath, n_vect, unique=None, phat=None):
 
-    plt.figure(figsize=(10,10))
+    matplotlib.rcParams.update({'font.size': 22})
     if p.shape[0] == 1:
-        plt.plot(t,p[0,:],color='black')
-        for i in range(s.shape[0]):
-            t_spikes = np.where(s[i,:])
-            plt.scatter(t[t_spikes],p[0,t_spikes])
-        plt.ylabel('p(m)')
-        plt.xlabel('t(ms)')
+        plt.figure(figsize=(20,3))
+        plt.plot(t,p[0,:],color='black',zorder=10, label='True position')
+        if phat is not None:
+            plt.plot(t,phat[0,:],color='b',alpha=0.5,zorder=0,label='Estimated position')
+        if unique is None:
+            for i in range(s.shape[0]):
+                t_spikes = np.where(s[i,:])
+                plt.scatter(t[t_spikes],p[0,t_spikes],zorder=20,s=4)
+        else:
+            t_spikes = np.where(s[unique,:])
+            plt.scatter(t[t_spikes],p[0,t_spikes],zorder=20,s=6,c='r', label='Example neuron spikes')
+        plt.ylabel('Position(m)')
+        plt.xlabel('Time(s)')
+        plt.legend()
+        plt.ylim(-1,1)
     else:
-        plt.plot(p[0,:],p[1,:],color='black')
-        for i in range(s.shape[0]):
-            t_spikes = np.where(s[i,:])
-            plt.scatter(p[0,t_spikes],p[1,t_spikes])
+        plt.figure(figsize=(10,10))
+        if phat is not None:
+            plt.plot(phat[0,:],phat[1,:],color='b',alpha=0.5,zorder=0)
+        plt.plot(p[0,:],p[1,:],color='black',zorder=10)
+        if unique is None:
+            for i in range(s.shape[0]):
+                t_spikes = np.where(s[i,:])
+                plt.scatter(p[0,t_spikes],p[1,t_spikes],zorder=20,s=4)
+        else:
+            t_spikes = np.where(s[unique,:])
+            plt.scatter(p[0,t_spikes],p[1,t_spikes],zorder=20,s=50,c='r')
         plt.ylabel('p_1(m)')
         plt.xlabel('p_0(m)')
-    
+        plt.xlim(-1,1)
+        plt.ylim(-1,1)
 
-    filepath = "%s-pathtraj.png" % basepath
+    filepath = "%s-pathtraj.svg" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
 
     plt.figure(figsize=(10,10))
-    n = s.shape[0]
+    n = n_vect.shape[0]
     ncols = int(np.sqrt(n))
     nrows = int(np.ceil(n/ncols))
     c = plt.rcParams['axes.prop_cycle'].by_key()['color']
     for i in np.arange(n):
-        plt.subplot(nrows, ncols, i+1, aspect='equal')
-
-        plt.title('Neuron %i' % i)
         if p.shape[0] == 1:
-            plt.plot(t,p[0,:],color='black')
-            t_spikes = np.where(s[i,:])
-            plt.scatter(t[t_spikes],p[0,t_spikes], color=c[i%10])
+            plt.subplot(nrows, ncols, i+1)
+            plt.plot(t,p[0,:],color='black',linewidth=0.5,zorder=0)
+            t_spikes = np.where(s[n_vect[i],:])
+            plt.scatter(t[t_spikes],p[0,t_spikes], color=c[i%10],zorder=10,s=0.75)
             plt.ylabel('p(m)')
             plt.xlabel('t(ms)')
+            plt.ylim(-1,1)  
         else:
-            plt.plot(p[0,:],p[1,:],color='black')
-            t_spikes = np.where(s[i,:])
-            plt.scatter(p[0,t_spikes],p[1,t_spikes], color=c[i%10])
+            plt.subplot(nrows, ncols, i+1, aspect='equal',zorder=0)
+            plt.plot(p[0,:],p[1,:],linewidth=0.5,color='black')
+            t_spikes = np.where(s[n_vect[i],:])
+            plt.scatter(p[0,t_spikes],p[1,t_spikes], color=c[i%10],zorder=10,s=0.75)
             plt.ylabel('p_1(m)')
             plt.xlabel('p_0(m)')
-        
+            plt.xlim(-1,1)
+            plt.ylim(-1,1)
+        plt.title('Neuron %i' % n_vect[i])
 
     plt.tight_layout()
     filepath = "%s-pathtraj_sep.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
-def plot_1drfs(p, r, dt, basepath, pad=0):
+def plot_animtraj(p, s, t, basepath, neuron=-1):
 
-    p = p[0,pad:]
-    r = r[:,pad:]
+    fig, ax = plt.subplots(figsize=(10,10))
 
-    plt.figure(figsize=(10,10))
-    c = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    tf = 0.1
-    m = int(tf/dt)
-    filter = np.ones(m)*1/m
-    for i in range(r.shape[0]):
-        rf = np.convolve(r[i,:],filter, 'same')
-        plt.plot(p, rf, label='r' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
+    fr = int(t.shape[0]/1000)
+    def animate(f_i):
+        ax.clear()
+        f = f_i*1000
+        plt.plot(p[0,:f],p[1,:f],color='black',zorder=0)
+        if neuron == -1:
+            for i in range(s.shape[0]):
+                t_spikes = np.where(s[i,:f])
+                plt.scatter(p[0,t_spikes],p[1,t_spikes],zorder=10,s=4)
+        else:
+            t_spikes = np.where(s[neuron,:f])
+            plt.scatter(p[0,t_spikes],p[1,t_spikes],zorder=10,s=6,c='r')
+        plt.scatter(p[0,f],p[1,f])
+        plt.xlim(-1,1)
+        plt.ylim(-1,1)
+        return ax 
+        
+    ani = animation.FuncAnimation(fig, animate, frames=fr)
+
+    filepath = "%s-trajmov.gif" % basepath        
+    ani.save(filepath, fps=10)         
+    return ani
+
+
+def plot_1drfs(p, fr, dt, basepath, n_vect):
+
+    matplotlib.rcParams.update({'font.size': 22})
+    plt.figure(figsize=(20,3))
+    # c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    jet = cm = plt.get_cmap('hsv') 
+    cNorm  = colors.Normalize(vmin=0, vmax=n_vect.shape[0])
+    c = matplotlib.cm.ScalarMappable(norm=cNorm, cmap=jet)
+    for i in range(n_vect.shape[0]):
+        plt.plot(p[0,:], fr[n_vect[i],:], label='r' + str(n_vect[i]) if i < 16 else '_nolegend_', color=c.to_rgba(i))
     plt.legend()
-    plt.xlim(np.min(p),np.max(p))
-    plt.ylabel('r')
-    plt.xlabel('p')
+    #plt.xlim(np.min(p),np.max(p))
+    plt.ylabel('Firing rate (Hz)')
+    plt.xlabel('Position (m)')
+    plt.xticks
 
-    filepath = "%s-1drfs.png" % basepath
+    filepath = "%s-1drfs.svg" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
@@ -293,10 +345,7 @@ def plot_1drfsth(D, x, p, basepath, pad=0):
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
-def plot_1dspikebins(p, s, b, basepath, pad=0):
-
-    p = p[0,pad:]
-    s = s[:,pad:]
+def plot_1dspikebins(p, s, b, basepath, n_vect):
 
     plt.figure(figsize=(10,10))
     n = s.shape[0]
@@ -304,20 +353,20 @@ def plot_1dspikebins(p, s, b, basepath, pad=0):
     diam = np.max(p)-np.min(p)
     binsize = int(s.shape[1]/b)
     pts = np.arange(b)
-    ppts = np.expand_dims(p[pts*binsize], -1)
+    ppts = np.expand_dims(p[0,pts*binsize], -1)
 
     auxppts = np.tile(ppts,(1,p.shape[0]))
     auxp = np.tile(p,(ppts.shape[0],1))
     
     ncols = int(np.sqrt(n))
     nrows = int(np.ceil(n/ncols))
-    for i in np.arange(n):
+    for i in np.arange(n_vect.shape[0]):
         plt.subplot(nrows, ncols, i+1)
         dist = np.abs(auxppts-auxp)
-        smat = np.tile(s[i,:],(b,1))
+        smat = np.tile(s[n_vect[i],:],(b,1))
         sums = np.sum(smat * (dist < diam/b), axis=1)
         plt.bar(ppts[:,0], sums)
-        plt.title('Neuron %i' % i)
+        plt.title('Neuron %i' % n_vect[i])
 
     plt.tight_layout()
     filepath = "%s-1dspikebins.png" % basepath
@@ -325,12 +374,12 @@ def plot_1dspikebins(p, s, b, basepath, pad=0):
 
 
     
-def plot_2drfs(p, r, dt, basepath, n_vect):
+def plot_2drfs(p, fr, dt, basepath, n_vect):
 
     fig1 = plt.figure(figsize=(10,10))
     c = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
-    maxs = np.max(r, axis=0)
-    colors = c[np.argmax(r, axis=0)%10]
+    maxs = np.max(fr, axis=0)
+    colors = c[np.argmax(fr, axis=0)%10]
     colors[maxs == 0] = 'k'
     plt.scatter(p[0,:], p[1,:], color=colors)
     plt.ylabel('p2')
@@ -344,13 +393,9 @@ def plot_2drfs(p, r, dt, basepath, n_vect):
     fig2 = plt.figure(figsize=(10,10))
     ncols = int(np.sqrt(n))
     nrows = int(np.ceil(n/ncols))
-    tf = 0.01
-    m = int(tf/dt)
-    filter = np.ones(m)*1/m
     for i in np.arange(n):
         plt.subplot(nrows, ncols, i+1)
-        rf = np.convolve(r[n_vect[i],:],filter,'same')
-        plt.scatter(p[0,:],p[1,:],c=rf, cmap='jet',s=1)
+        plt.scatter(p[0,:],p[1,:],c=fr, cmap='jet',s=1)
         plt.title('Neuron %i' % n_vect[i])
         plt.gca().set_aspect('equal', adjustable='box')
 
@@ -451,18 +496,61 @@ def plot_2dspikebinstmp(p, s, b, dt, basepath):
     filepath = "%s-2dspikebins.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
-def plot_errorplot(data, xaxis, title, labels, basepath, ground=None, ynormalized=True):
+def plot_errorplot(data, xaxis, title, labels, basepath, ground=None, ynormalized=True, per_cond=None):
 
     plt.figure(figsize=(4,4))
     ax = plt.gca()
+    i = 0
     for key, res in data.items():
         
-        mean = np.mean(res, axis=1)
-        err = np.std(res, axis=1)
-        plt.errorbar(xaxis, mean, err, marker='.', capsize=3, label=key)
+        mean = res[0]
+        err = res[1]
+        if per_cond is None:
+            plt.errorbar(xaxis, mean, err, marker='.', capsize=3, label=key)
+        else:
+            plt.errorbar(xaxis[i], mean, err, marker='.', capsize=3)
+            i += 1
 
     if ground is not None:
         plt.plot(ground[0,:], ground[1,:], label='analytical')
+
+    if per_cond is not None:
+        plt.xticks(xaxis, labels=per_cond)
+        plt.xlim(-1,xaxis.shape[0]+1)
+
+    plt.title(title, fontsize=10)
+    plt.xlabel(labels[0], fontsize=10)
+    plt.ylabel(labels[1], fontsize=10)
+    if ynormalized: plt.ylim(0,1.1)
+    plt.tick_params(axis='both', labelsize=10)
+    plt.legend(frameon=False, prop={'size': 10})
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    plt.tight_layout()
+    filepath = "%s-error_plot.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+def plot_errorplot_cond(data, tags, title, labels, basepath, ground='', ynormalized=True):
+
+    plt.figure(figsize=(4,4))
+    ax = plt.gca()
+    i = 0
+    for tag in tags:
+        for key, res in data.items():
+            if key.startswith(tag):
+                mean = np.mean(res, axis=1)
+                err = np.std(res, axis=1)
+                if tag != ground:
+                    plt.errorbar(i, mean, err, marker='.', capsize=3)
+                    i += 1
+                else:
+                    tags.pop()
+                    plt.errorbar(-0.5, mean, err, marker='.', color='r')
+                    plt.hlines(mean, -1,len(tags)+1, color='r')
+
+    plt.xticks(np.arange(len(tags)), labels=tags)
+    plt.xlim(-1,len(tags)+1)
 
     plt.title(title, fontsize=10)
     plt.xlabel(labels[0], fontsize=10)
@@ -580,6 +668,7 @@ def plot_violinplot(data, title, labels, basepath):
     plt.violinplot(dataset, showextrema=False)
     plt.errorbar(xticks, means, stds, linestyle='None', fmt='o', capsize=5, color='k')
 
+    # TODO move this to line fit elsewhere
     coeffs = np.polyfit(total_px,total_py,1)
     Rp = pearsonr(total_px, total_py)
     plt.text(0.6, 0.9, "R = {:.4f} \n p = {:.4f}".format(Rp[0], Rp[1]), transform=plt.gca().transAxes)
@@ -604,14 +693,18 @@ def plot_displot(data, xaxis, title, labels, basepath, ground=None, ynormalized=
     ax = plt.gca()
     for key, res in data.items():
         
-        mean = np.mean(res, axis=1)
-        err = np.std(res, axis=1)
+        mean = res[0]
+        err = res[1]
         
         if len(xaxis)-mean.shape[0] > 0:
             zeros = np.zeros(len(xaxis)-mean.shape[0])
             mean = np.concatenate((mean, zeros))
 
-        plt.bar(xaxis, mean, width=np.abs(xaxis[1]-xaxis[0]), align='center')
+        if xaxis[0] == 0:
+            plt.bar(xaxis[1:], mean[1:], width=np.abs(xaxis[3]-xaxis[2]), align='center')
+            plt.bar(xaxis[0], mean[0], width=1, align='center')
+        else:
+            plt.bar(xaxis, mean, width=np.abs(xaxis[2]-xaxis[1]), align='center')
 
     if ground is not None:
         plt.plot(ground[0,:], ground[1,:], label='analytical')
