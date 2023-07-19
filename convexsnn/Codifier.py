@@ -147,19 +147,19 @@ class TorusCod():
 
     def decodify(self, y, scale=1/2, type='square'):
 
-        dim_pcs = y.shape[0]/2
+        dim_pcs = int(y.shape[0]/2)
         if scale > 1 or type != 'square':
             #TODO
             raise Exception("Decoding still not implemented")
         else:
-            alpha = np.zeros((2,y.shape[1]))
-            p_hat = np.zeros((2,y.shape[1]))
+            alpha = np.zeros((dim_pcs,y.shape[1]))
+            p_hat = np.zeros((dim_pcs,y.shape[1]))
 
             alpha[0,:] = np.arctan2(y[1,:],y[0,:])
-            alpha[0,alpha[0,:] < 0] += 2*np.pi
+            alpha[0,alpha[0,:] < -np.pi/2] += 2*np.pi
             if dim_pcs == 2:
                 alpha[1,:] = np.arctan2(y[3,:],y[2,:])
-                alpha[1,alpha[1,:] < 0] += 2*np.pi
+                alpha[1,alpha[1,:] < -np.pi/2] += 2*np.pi
 
             cycles = scale*np.pi
             p_hat[0,:] = alpha[0,:]/cycles - 1
