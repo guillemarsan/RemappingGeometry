@@ -19,19 +19,19 @@ import convexsnn.plot as plot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=2,
+    parser.add_argument("--dim_pcs", type=int, default=1,
                         help="Dimensionality of inputs")
-    parser.add_argument("--model", type=str, default='randclosed-load-polyae',
+    parser.add_argument("--model", type=str, default='randae',
                         help="Type of model")  
-    parser.add_argument("--nb_neurons", type=int, default=256,
+    parser.add_argument("--nb_neurons", type=int, default=512,
                         help="Number of neurons")
-    parser.add_argument("--dim_bbox", type=int, default=8,
+    parser.add_argument("--dim_bbox", type=int, default=16,
                         help="Dimensionality of outputs") 
-    parser.add_argument("--load_id", type=int, default=1,
+    parser.add_argument("--load_id", type=int, default=0,
                         help="In case of load, id of the bbox to load")
     parser.add_argument('--input_dir', nargs='+', type=float, default=[0.],
                         help="Direction of the input")
-    parser.add_argument("--input_amp", type=float, default=1.,
+    parser.add_argument("--input_amp", type=float, default=1,
                         help="Amplitude of input")
     parser.add_argument("--input_scale", action='store_true', default=True,
                         help="Scale the input by sqrtdbbox")
@@ -45,23 +45,29 @@ if __name__ == "__main__":
                         help="Neurons to recieve input current")
     parser.add_argument('--current_amp', type=float, default=0.,
                         help="Amplitude of the current input")
-    parser.add_argument("--noise_amp", type=float, default=0.,
+    parser.add_argument("--noise_amp", type=float, default=30.,
                         help="Amplitude of noise")
-    parser.add_argument("--decoder_amp", type=float, default=0.2,
+    parser.add_argument("--decoder_amp", type=float, default=0.7,
                         help="Amplitude of decoder matrix D")
-    parser.add_argument("--thresh_amp", type=float, default=1.25,
-                        help="Amplitude of the thresholds")    
-    parser.add_argument('--thresh_lognorm', action='store_true', default=False,
-                        help="The thresholds are taken from a lognormal distribution")                
-    parser.add_argument("--seed", type=int, default=666,
-                        help="Random seed")
+    parser.add_argument("--thresh_amp", type=float, default=1,
+                        help="Amplitude of the thresholds")
+    parser.add_argument("--conn_seed", type=int, default=0,
+                        help="Random seed for randae connectivity")    
+    parser.add_argument("--lognor_seed", type=float, default=0,
+                        help="Random seed for lognormal thresh (0 is not)")
+    parser.add_argument("--noise_seed", type=int, default=4,
+                        help="Random seed for noise injection") 
+    parser.add_argument("--path_seed", type=int, default=0,
+                        help="Random seed for random path")                  
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
     parser.add_argument("--plot", action='store_true', default=True,
                         help="Plot the results")
-    parser.add_argument("--gif", action='store_true', default=False,
+    parser.add_argument("--gif", action='store_true', default=True,
                         help="Generate a gif of the bbox")
-    parser.add_argument("--save", action='store_true', default=True,
+    parser.add_argument("--compute_fr", action='store_true', default=True,
+                        help="Compute frs and store")
+    parser.add_argument("--save", action='store_true', default=False,
                         help="Save V, s, r and Th matrices")
 
     
@@ -75,17 +81,20 @@ if __name__ == "__main__":
 
     dbbox = args.dim_bbox
     n = args.nb_neurons
+    
 
     print('Loading model...')
     model, D, G = get_model(dbbox ,n, dbbox,connectivity=args.model, decod_amp=args.decoder_amp, 
-                    thresh_amp=args.thresh_amp, load_id=args.load_id, lognormal=args.thresh_lognorm)
+                    thresh_amp=args.thresh_amp, load_id=args.load_id, conn_seed=args.conn_seed, lognor_seed=args.lognor_seed)
 
     # Construction of the path
     if args.dim_pcs == 1:
         path_type = 'ur'
     else:
-        path_type = 'uspiral'
-    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type)   
+        path_type = 'constant'
+    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type, path_seed=args.path_seed)   
+    
+   
 
     # Construction of the input
     print('Codifying input...')
@@ -121,7 +130,7 @@ if __name__ == "__main__":
 
     decoder = lambda r, i: D @ r - b[:,i] / model.lamb
     V, s, r, y = model.simulate_pathint(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
-    args.integrator = 'one'
+    args.integrator = 'pathint'
     
     # Decodify
     y = bias_corr*y
@@ -139,20 +148,23 @@ if __name__ == "__main__":
     pcs_list = np.where(active_list)[0]
     npcs = pcs_list.shape[0]
 
-    # FRs
-    ft = 1
-    m = int(ft/dt)
-    filter = np.ones(m)
-    fr = np.apply_along_axis(lambda m: np.convolve(m, filter, mode='same'), axis=1, arr=s)
-    maxfr = np.max(fr[active_list,:], axis=1)
-    if np.max(maxfr) <= ft/1e-3:
-        print('1 spike/ 1 ms asserted')
-    meanfr = np.mean(fr[active_list,:], axis=1)
-
     results['perpcs'] = npcs/n
     results['pcsidx'] = pcs_list.tolist()
-    results['maxfr'] = maxfr.tolist()
-    results['meanfr'] = meanfr.tolist()
+
+    # FRs
+    if args.compute_fr:
+        ft = 1
+        m = int(ft/dt)
+        filter = np.ones(m)
+        fr = np.apply_along_axis(lambda m: np.convolve(m, filter, mode='same'), axis=1, arr=s)
+        maxfr = np.max(fr[active_list,:], axis=1)
+        if np.max(maxfr) <= ft/1e-3:
+            print('1 spike/ 1 ms asserted')
+        meanfr = np.mean(fr[active_list,:], axis=1)
+
+        
+        results['maxfr'] = maxfr.tolist()
+        results['meanfr'] = meanfr.tolist()
 
     results['nb_steps'] = p.shape[1]
     results['dt'] = dt
@@ -163,14 +175,10 @@ if __name__ == "__main__":
         if args.embed_affine:
             np.savetxt("%s-k.csv" % basepath, k, fmt='%.3e')
             results['k'] = "%s-k.csv" % name
-        # np.savetxt("%s-V.csv" % basepath, V)
-        # results['V'] = "%s-V.csv" % name
         spike_times = np.argwhere(s)
         np.savetxt("%s-stimes.csv" % basepath, spike_times, fmt='%i')
         results['stimes'] = "%s-stimes.csv" % name
-        # np.savetxt("%s-r.csv" % basepath, r)
-        # results['r'] = "%s-r.csv" % name
-    
+
     filepath = "%s.json" % basepath
     with open(filepath, "w") as file_handle:
         json.dump(results, file_handle, indent=4)
@@ -178,35 +186,41 @@ if __name__ == "__main__":
     # Plot
     if args.plot:
         print('Generating neuroscience plot...')
-        plot.plot_neuroscience(x, y, V, s, t, basepath)
+    
+        if n > 49:
+                n_vect = np.where(np.any(s,axis=1))[0]
+                n_vect = n_vect[:49]
+                
+        else: 
+            n_vect = np.arange(n)
+
+        plot.plot_neuroscience(x, y, V, s, t, basepath, n_vect, T=model.T[0])
+        plot.plot_pathtrajectory(p, s, t, basepath, n_vect, unique=4, phat = p_hat)
       
         if dbbox == 2 or dbbox ==3:
             print('Generating bounding box plot...')
-            if dbbox == 2:
+            if dbbox == 2 and n <= 16:
                 plot.plot_1dbbox(x[:,-1], y[:,-1:], model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
-            else:
+            elif dbbox == 4:
                 plot.plot_2dbboxproj(model.F, G, model.T, args.input_amp, basepath)
 
         if args.dim_pcs == 1:
             print('Generating 1drfs plot...')
 
-            plot.plot_1drfs(p, r, dt, basepath, pad=0)
-            plot.plot_1dspikebins(p, s, 25, basepath, pad=0)
-            plot.plot_1drfsth(D, x, p, basepath, pad=0)
+            if args.compute_fr: plot.plot_1drfs(p, fr, dt, basepath, n_vect)
+            plot.plot_1dspikebins(p, s, 25, basepath, n_vect)
+            plot.plot_1drfsth(D, x, p, basepath)
         
         if args.dim_pcs == 2:
             print('Generating 2drfs plot...')
 
-            if n > 49:
-                n_vect = np.where(np.any(s,axis=1))[0]
-                n_vect = n_vect[:49]
-            else: 
-                n_vect = np.arange(n)
-           
-            plot.plot_2drfs(p, r, dt, basepath, n_vect)
+            if args.compute_fr: plot.plot_2drfs(p, r, dt, basepath, n_vect)
             plot.plot_2dspikebins(p, s, dt, 100, basepath, n_vect)
             plot.plot_2drfsth(D, x, p, basepath)
 
-    if args.gif and dbbox == 2:
-        print('Generating gif...')
-        plot.plot_1danimbbox(x, y, model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
+    if args.gif:
+        if args.dim_pcs == 2:
+            plot.plot_animtraj(p,s,t,basepath, neuron=4)
+        if dbbox == 2:
+            print('Generating gif...')
+            plot.plot_1danimbbox(x, y, model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
