@@ -3,13 +3,15 @@ from matplotlib.pyplot import connect
 import numpy as np
 from convexsnn.ConvexSNN import ConvexSNN
 
-def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, lognormal=False):
+def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, conn_seed=0, lognor_seed=0):
 
     ones = np.ones((out,n))
     D = ones
 
+    
     # Construction of the model
     if connectivity == 'custom':
+        np.random.seed(seed=conn_seed)
         F = np.random.rand(n,inp)
         F[1,:] *= -1
         nF = np.linalg.norm(F, axis=0)
@@ -19,9 +21,11 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, l
         D[0,:] *= -1
           
     elif connectivity == 'randae':
+        np.random.seed(seed=conn_seed)
         D = np.random.normal(size=(out,n))
     
     elif connectivity == 'bowl-randae':
+        np.random.seed(seed=conn_seed)
         D[:-1,:] = np.random.normal(size=(out-1,n))
 
     elif connectivity == 'cone-polyae':
@@ -138,8 +142,8 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, l
     T = np.ones(n) * 1/2*(np.linalg.norm(D, axis=0)**2)
     D = D*decod_amp
 
-    if lognormal:
-        np.random.seed(0)
+    if lognor_seed != 0:
+        np.random.seed(lognor_seed)
         T = T*(thresh_amp + 1 - np.random.lognormal(mean=0,sigma=0.2,size=T.shape))
     else:
         T = T*thresh_amp
