@@ -1,36 +1,39 @@
 import argparse
-from tempfile import SpooledTemporaryFile
 import time
 import json
 import string
 import random
 
 import numpy as np
-from convexsnn.Codifier import ProjectionCod, TorusCod
+from convexsnn.AngleEncoder import AngleEncoder
 
 
 
 from convexsnn.embedding import get_embedding
 from convexsnn.network import get_model
 from convexsnn.current import get_current
-from convexsnn.path import get_path
+from convexsnn.path import get_path, get_pathe
 import convexsnn.plot as plot
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=2,
+    parser.add_argument("--dim_pcs", type=int, default=1,
                         help="Dimensionality of inputs")
     parser.add_argument("--model", type=str, default='randclosed-load-polyae',
                         help="Type of model")  
+    parser.add_argument('--conn_seed',type=int, default=0,
+                        help="Random seed for the connectivity in case of random") 
     parser.add_argument("--nb_neurons", type=int, default=256,
                         help="Number of neurons")
+    parser.add_argument("--encoding", type=str, default='parallel',
+                        help='Determines the type of encoder between rotation, parallel and flexible')
     parser.add_argument("--dim_bbox", type=int, default=8,
                         help="Dimensionality of outputs") 
     parser.add_argument("--load_id", type=int, default=1,
                         help="In case of load, id of the bbox to load")
-    parser.add_argument('--input_dir', nargs='+', type=float, default=[0.],
-                        help="Direction of the input")
+    parser.add_argument('--env', nargs='+', type=float, default=0,
+                        help="Environment id")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
     parser.add_argument("--input_scale", action='store_true', default=True,
@@ -51,12 +54,16 @@ if __name__ == "__main__":
                         help="Amplitude of decoder matrix D")
     parser.add_argument("--thresh_amp", type=float, default=1.25,
                         help="Amplitude of the thresholds")    
-    parser.add_argument('--thresh_lognorm', action='store_true', default=False,
-                        help="The thresholds are taken from a lognormal distribution")                
+    parser.add_argument('--lognor_seed',type=int, default=0,
+                        help="The thresholds are taken from a lognormal distribution if not 0") 
+    parser.add_argument('--lognor_sigma',type=float, default=0.2,
+                        help="The variance of the lognormal for sampling thresholds")                   
     parser.add_argument("--seed", type=int, default=666,
                         help="Random seed")
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
+    parser.add_argument("--compute_fr", action='store_true', default=False,
+                        help="Compute rough meanfr for quick check")
     parser.add_argument("--plot", action='store_true', default=True,
                         help="Plot the results")
     parser.add_argument("--gif", action='store_true', default=False,
@@ -78,98 +85,122 @@ if __name__ == "__main__":
 
     print('Loading model...')
     model, D, G = get_model(dbbox ,n, dbbox,connectivity=args.model, decod_amp=args.decoder_amp, 
-                    thresh_amp=args.thresh_amp, load_id=args.load_id, lognormal=args.thresh_lognorm)
+                    thresh_amp=args.thresh_amp, load_id=args.load_id, conn_seed=args.conn_seed, lognor_seed=args.lognor_seed, lognor_sigma=args.lognor_sigma)
 
     # Construction of the path
     if args.dim_pcs == 1:
         path_type = 'ur'
     else:
-        path_type = 'uspiral'
-    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type)   
+        path_type = 'usnake'
 
-    # Construction of the input
-    print('Codifying input...')
-    Codifier = TorusCod()
-    x, dx = Codifier.codify(p, dp, scale=args.cod_scale, type=args.cod_type)
-    dinput = x.shape[0]
+    
+    # Load gamma path
+    print('Loading path')
+    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type) 
 
-    # Construction of the high dimensional embedding
-    print('Embedding input...')
-    Theta, k = get_embedding(dbbox, dinput=dinput, input_dir=args.input_dir, input_scale=args.input_scale, input_amp=args.input_amp, D=D,
-                        vect='random', affine=args.embed_affine)
+    # TODO
+    results['nb_steps'] = p.shape[1]
+    results['dt'] = dt
 
-    # Embedd
-    x = Theta @ x + k
-    dx = Theta @ dx
-    #x = 0*x + D[:,2,np.newaxis]*(np.sqrt(dbbox)/args.decoder_amp)
+
+    if args.encoding == 'rotation':
+        # Only position variables
+        g = p
+        dg = dp
+
+        # Angle encoding to semicircles
+        print('Encoding input...')
+        Encoder = AngleEncoder()
+        k, dk = Encoder.encode(g, dg)
+        dinput = k.shape[0]
+
+        # Construction of Theta(e)
+        print('Embedding input...')
+        Theta = get_embedding(dbbox, dinput=dinput, env=args.env, input_amp=args.input_amp, 
+                              variance=-1, input_scale=args.input_scale)  
+        
+        # Embedd
+        x = Theta @ k
+        dx = Theta @ dk
+    else:
+        # Also environment variables
+        dim_e = int((dbbox - 2*args.dim_pcs)/2)
+        e, de, eofp = get_pathe(p, dim_e, args.env, flexible=args.encoding=='flexible')
+        g = np.vstack([p,e])
+        dg = np.vstack([dp,de])
+
+        # Angle encoding to semicircles
+        print('Encoding input...')
+        Encoder = AngleEncoder()
+        k, dk = Encoder.encode(g, dg)
+        dinput = k.shape[0]
+    
+        # Embedd (Theta = Id)
+        x = k
+        dx = dk
 
     # Construction of the current manipulation (noise + experiment)
     np.random.seed(seed=args.seed)
     I, b = get_current(dbbox, t, G, args.noise_amp, args.current_neurons, args.current_amp, vect='neuron', rseed=args.seed)
-    #I = I - G@(model.lamb*z + dz)
 
     # Bias correction for D
     input_amp = np.sqrt(dbbox)*args.input_amp if args.input_scale else args.input_amp
     bias_corr = input_amp/(input_amp+0.5*(args.decoder_amp - args.thresh_amp))
 
-    # Simulate/train the model
+    # Simulate the model
     print('Simulating model...')
     x0 = x[:,0]
     r0 = np.linalg.lstsq(bias_corr*D,x0+b[:,0]/model.lamb,rcond=None)[0]
-    y0 = D @ r0 - b[:,0] / model.lamb   
-    V0 = model.F @ x0 - G @ y0
+    x_hat0 = D @ r0 - b[:,0] / model.lamb   
+    V0 = model.F @ x0 - G @ x_hat0
 
     decoder = lambda r, i: D @ r - b[:,i] / model.lamb
-    V, s, r, y = model.simulate_pathint(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+    V, s, r, x_hat = model.simulate_pathint(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
     args.integrator = 'one'
     
-    # Decodify
-    y = bias_corr*y
-    y_disem = Theta.T @ y
-    p_hat = Codifier.decodify(y_disem, scale=args.cod_scale, type=args.cod_type)
+    # Decode
+    x_hat = bias_corr*x_hat
+
+    k_hat = Theta.T @ x_hat if args.encoding == 'rotation' else x_hat
+    g_hat = Encoder.decode(k_hat)
+
 
     # Save results 
     print('Saving results...')
-    results['y_end'] = y[:,-1].tolist()
-    results['tracking_error'] = np.mean(np.linalg.norm(y - x, axis=0))
-    results['spatial_tracking_error'] = np.mean(np.linalg.norm(p_hat - p, axis=0))
+    results['tracking_error'] = np.mean(np.linalg.norm(x_hat - x, axis=0))
+    results['spatial_tracking_error'] = np.mean(np.linalg.norm(g_hat - g, axis=0))
 
     # PCs
     active_list = np.any(s,axis=1)
     pcs_list = np.where(active_list)[0]
     npcs = pcs_list.shape[0]
-
-    # FRs
-    ft = 1
-    m = int(ft/dt)
-    filter = np.ones(m)
-    fr = np.apply_along_axis(lambda m: np.convolve(m, filter, mode='same'), axis=1, arr=s)
-    maxfr = np.max(fr[active_list,:], axis=1)
-    if np.max(maxfr) <= ft/1e-3:
-        print('1 spike/ 1 ms asserted')
-    meanfr = np.mean(fr[active_list,:], axis=1)
-
     results['perpcs'] = npcs/n
     results['pcsidx'] = pcs_list.tolist()
-    results['maxfr'] = maxfr.tolist()
-    results['meanfr'] = meanfr.tolist()
 
-    results['nb_steps'] = p.shape[1]
-    results['dt'] = dt
+    # FRs
+    if args.compute_fr:
+        print('Computing firing rates...')
+        ft = 1
+        m = int(ft/dt)
+        filter = np.ones(m)
+        fr = np.apply_along_axis(lambda m: np.convolve(m, filter, mode='same'), axis=1, arr=s)
+        maxfr = np.max(fr[active_list,:], axis=1)
+        if np.max(maxfr) <= ft/1e-3:
+            print('1 spike/ 1 ms asserted')
+        meanfr = np.mean(fr[active_list,:], axis=1)
+
+    
+        results['maxfr'] = maxfr.tolist()
+        results['meanfr'] = meanfr.tolist()
 
     if args.save:
-        np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
-        results['Th'] = "%s-Th.csv" % name
-        if args.embed_affine:
-            np.savetxt("%s-k.csv" % basepath, k, fmt='%.3e')
-            results['k'] = "%s-k.csv" % name
-        # np.savetxt("%s-V.csv" % basepath, V)
-        # results['V'] = "%s-V.csv" % name
+        if args.encoding == 'rotation':
+            np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
+            results['Th'] = "%s-Th.csv" % name
+        
         spike_times = np.argwhere(s)
         np.savetxt("%s-stimes.csv" % basepath, spike_times, fmt='%i')
         results['stimes'] = "%s-stimes.csv" % name
-        # np.savetxt("%s-r.csv" % basepath, r)
-        # results['r'] = "%s-r.csv" % name
     
     filepath = "%s.json" % basepath
     with open(filepath, "w") as file_handle:
@@ -177,36 +208,41 @@ if __name__ == "__main__":
 
     # Plot
     if args.plot:
+
+        if args.encoding != 'rotation':
+            print('Generating (p,e) plot...')
+            plot.plot_pe(p, eofp, e, t, basepath)
+
+        if n > 49:
+                n_vect = np.where(np.any(s,axis=1))[0]
+                n_vect = n_vect[:49]
+        else: 
+            n_vect = np.arange(n)
+
         print('Generating neuroscience plot...')
-        plot.plot_neuroscience(x, y, V, s, t, basepath)
-      
+        plot.plot_neuroscience(x, x_hat, V, s, t, basepath, n_vect, T=model.T[0])
+
         if dbbox == 2 or dbbox ==3:
             print('Generating bounding box plot...')
             if dbbox == 2:
-                plot.plot_1dbbox(x[:,-1], y[:,-1:], model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
+                plot.plot_1dbbox(x[:,-1], x_hat[:,-1:], model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
             else:
                 plot.plot_2dbboxproj(model.F, G, model.T, args.input_amp, basepath)
 
         if args.dim_pcs == 1:
             print('Generating 1drfs plot...')
 
-            plot.plot_1drfs(p, r, dt, basepath, pad=0)
-            plot.plot_1dspikebins(p, s, 25, basepath, pad=0)
-            plot.plot_1drfsth(D, x, p, basepath, pad=0)
+            plot.plot_1drfs(p, r, dt, basepath, n_vect)
+            plot.plot_1dspikebins(p, s, 25, basepath, n_vect)
+            plot.plot_1drfsth(D, x, p, basepath)
         
         if args.dim_pcs == 2:
             print('Generating 2drfs plot...')
-
-            if n > 49:
-                n_vect = np.where(np.any(s,axis=1))[0]
-                n_vect = n_vect[:49]
-            else: 
-                n_vect = np.arange(n)
            
-            plot.plot_2drfs(p, r, dt, basepath, n_vect)
+            plot.plot_2drfs(p, r, basepath, n_vect)
             plot.plot_2dspikebins(p, s, dt, 100, basepath, n_vect)
             plot.plot_2drfsth(D, x, p, basepath)
 
     if args.gif and dbbox == 2:
         print('Generating gif...')
-        plot.plot_1danimbbox(x, y, model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))
+        plot.plot_1danimbbox(x, x_hat, model.F, G, model.T, basepath, plotx=(args.model == 'randae' or args.model == 'polyae'))

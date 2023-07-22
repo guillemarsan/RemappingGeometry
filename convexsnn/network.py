@@ -3,7 +3,8 @@ from matplotlib.pyplot import connect
 import numpy as np
 from convexsnn.ConvexSNN import ConvexSNN
 
-def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, conn_seed=0, lognor_seed=0):
+def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, 
+              conn_seed=0, lognor_seed=0, lognor_sigma=0.2):
 
     ones = np.ones((out,n))
     D = ones
@@ -144,7 +145,7 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, c
 
     if lognor_seed != 0:
         np.random.seed(lognor_seed)
-        T = T*(thresh_amp + 1 - np.random.lognormal(mean=0,sigma=0.2,size=T.shape))
+        T = T*(thresh_amp + 1 - np.random.lognormal(mean=0,sigma=lognor_sigma,size=T.shape))
     else:
         T = T*thresh_amp
 

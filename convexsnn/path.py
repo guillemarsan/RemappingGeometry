@@ -1,13 +1,15 @@
-
+import scipy
 import numpy as np
 
+dt = 0.0001
+tmax = 3 #in s
+time_steps = int(tmax * 1/dt)
+
 def get_path(dpcs, type, path_seed=0):
-    dt = 0.0001
-    time_steps = int(3 * 1/dt)
+    
     t = np.arange(time_steps)*dt
 
     ones = np.ones((dpcs,time_steps))
-    tmax = np.max(t)
 
     if type == 'constant':
         p = 0.5*ones
@@ -96,3 +98,52 @@ def get_path(dpcs, type, path_seed=0):
                     dp[d,ts+1] = 0
         print(np.max(dp))    
     return p, dp, t, dt, time_steps
+
+def get_pathe(p, dim_e, env, flexible=False):
+
+    def gram(x):
+        sigma = 0.5
+        condensed_dist = scipy.spatial.distance.pdist(x)
+        dist = scipy.spatial.distance.squareform(condensed_dist)
+        gram = np.exp(-1 * (dist ** 2) / (2*sigma))
+        return gram
+    
+    dim_pcs = p.shape[0]
+    sqrtnum_bins = 21
+    num_bins = sqrtnum_bins ** 2
+    
+    if dim_pcs == 1:
+        points = np.linspace(-1,1,num_bins).reshape(1,-1)
+        step = (2/(num_bins-1))/2
+    else:
+        points = np.linspace(-1,1,sqrtnum_bins)
+        step = (2/(sqrtnum_bins-1))/2
+        points = np.array(np.meshgrid(points,points)).reshape(2,-1)
+
+    covar = gram(points.T)
+
+    e = np.zeros((dim_e, time_steps))
+    de = np.zeros((dim_e, time_steps))
+    for i in np.arange(dim_e): 
+        if not flexible:
+            np.random.seed(70+i)
+            canonic = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
+            canonic = canonic/(2*np.max(np.abs(canonic))) # set it [-0.5,05]
+            np.random.seed(env+i*50)
+            # TODO do it with the variance for biased embedding
+            nu = np.random.uniform(-0.4,0.4) # [-0.9, 0.9]
+            eofp = nu + canonic
+        else:
+            np.random.seed(env+i)
+            # TODO do it with the variance for biased embedding
+            eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
+            eofp = 0.9* eofp/(np.max(np.abs(eofp))) # [-0.9,0.9]
+
+        
+        for j in np.arange(num_bins):
+            dist = np.max(np.abs(np.expand_dims(points[:,j],-1)-p), axis=0) # Manhattan distance
+            e[i,np.argwhere(dist < step)] = eofp[j]
+
+        aux = np.diff(e[i,:])/dt
+        de[i,:] = np.append(aux,aux[-1])
+    return e, de, eofp

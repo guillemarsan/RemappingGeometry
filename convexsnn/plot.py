@@ -3,7 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.animation as animation
-from utils import compute_meshgrid, compute_ratemap, compute_pf
+from utils import compute_meshgrid, compute_pathloc, compute_ratemap, compute_pf
 from mpl_toolkits.mplot3d import Axes3D as plt3d
 from scipy.stats.stats import pearsonr
 
@@ -201,7 +201,7 @@ def plot_neuroscience(x, y, V, s, t, basepath, n_vect, T=None):
     ax3.set_ylabel('Trial 1')
     ax3.set_xlabel('t(ms)')
 
-    filepath = "%s-neurosc.svg" % basepath
+    filepath = "%s-neurosc.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
@@ -319,20 +319,17 @@ def plot_1drfs(p, fr, dt, basepath, n_vect):
     plt.xlabel('Position (m)')
     plt.xticks
 
-    filepath = "%s-1drfs.svg" % basepath
+    filepath = "%s-1drfs.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
     return plt.gcf()
 
-def plot_1drfsth(D, x, p, basepath, pad=0):
-
-    p = p[0,pad:]
-    x = x[:,pad:]
+def plot_1drfsth(D, x, p, basepath):
 
     plt.figure(figsize=(10,10))
     c = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
     dotprod = D.T @ x
     for i in range(dotprod.shape[0]):
-        plt.plot(p, dotprod[i,:], label='r' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
+        plt.plot(p[0,:], dotprod[i,:], label='r' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
 
     colors = c[np.argmax(dotprod, axis=0)%10]
     plt.scatter(p, np.ones_like(p)*np.max(dotprod)+0.05, color=colors)
@@ -366,7 +363,9 @@ def plot_1dspikebins(p, s, b, basepath, n_vect):
         smat = np.tile(s[n_vect[i],:],(b,1))
         sums = np.sum(smat * (dist < diam/b), axis=1)
         plt.bar(ppts[:,0], sums)
-        plt.title('Neuron %i' % n_vect[i])
+        plt.xticks([])
+        plt.yticks([])
+        plt.title('Neuron %i' % n_vect[i], fontsize=10)
 
     plt.tight_layout()
     filepath = "%s-1dspikebins.png" % basepath
@@ -374,7 +373,7 @@ def plot_1dspikebins(p, s, b, basepath, n_vect):
 
 
     
-def plot_2drfs(p, fr, dt, basepath, n_vect):
+def plot_2drfs(p, fr, basepath, n_vect):
 
     fig1 = plt.figure(figsize=(10,10))
     c = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
@@ -395,8 +394,10 @@ def plot_2drfs(p, fr, dt, basepath, n_vect):
     nrows = int(np.ceil(n/ncols))
     for i in np.arange(n):
         plt.subplot(nrows, ncols, i+1)
-        plt.scatter(p[0,:],p[1,:],c=fr, cmap='jet',s=1)
-        plt.title('Neuron %i' % n_vect[i])
+        plt.scatter(p[0,:],p[1,:],c=fr[i,:], cmap='jet',s=1)
+        plt.xticks([])
+        plt.yticks([])
+        plt.title('Neuron %i' % n_vect[i], fontsize=10)
         plt.gca().set_aspect('equal', adjustable='box')
 
     plt.tight_layout()
@@ -424,46 +425,32 @@ def plot_2drfsth(D, x, p, basepath):
     return fig1
 
 
-def plot_2dspikebins(p, s, dt, b, basepath, n_vect, maxfr=None, grid=True):
+def plot_2dspikebins(p, s, dt, b, basepath, n_vect):
 
     plt.figure(figsize=(7,7))
     n = n_vect.shape[0]
 
     radius = (np.max(p)-np.min(p))/2
-    step = 2*radius/np.sqrt(b)
-
-    if grid:
-        bins = compute_meshgrid(radius, b)
-    else:
-        binsize = int(s.shape[1]/b)
-        pts = np.arange(b)
-        ppts = p[:,pts*binsize]
+        
+    bins = compute_meshgrid(radius, b)
     
     ncols = int(np.sqrt(n))
     nrows = int(np.ceil(n/ncols))
     for i in np.arange(n):
         plt.subplot(nrows, ncols, i+1)
         sums = np.zeros(bins.shape[1])
-        if grid:
-            ratemap = compute_ratemap(p, s[n_vect[i]], dt, bins)
-            sums = compute_pf(ratemap, bins)
-        else:
-            for j in np.arange(bins.shape[1]):
-                dist = np.linalg.norm(np.expand_dims(ppts[:,j],-1)-p, axis=0)
-                consider = np.argwhere(dist < (step/2))
-                sums[j] = np.sum(s[n_vect[i],consider])/(consider.size*dt) if consider.size != 0 else 0
-        if grid:
-            ptr = int(np.sqrt(b))
-            plt.imshow(np.reshape(sums, (ptr,ptr)), cmap='jet', interpolation='bilinear')
-        else:
-            plt.scatter(ppts[0,:],ppts[1,:],c=sums, cmap='jet')
-
+       
+        pathloc = compute_pathloc(p, bins)
+        tb = np.sum(pathloc, axis=1)*dt
+        ratemap = compute_ratemap(s[n_vect[i]], pathloc, tb)
+        sums = compute_pf(ratemap, bins)
+        maxfr = np.max(sums)
+    
+        ptr = int(np.sqrt(b))
+        plt.imshow(np.reshape(sums, (ptr,ptr)), cmap='jet', interpolation='bilinear')
         plt.xticks([])
         plt.yticks([])
-        if maxfr is not None:
-            plt.title('N %i' % n_vect[i] + ',%.2fHz' % maxfr[i], fontsize=10)
-        else:
-            plt.title('N %i' % n_vect[i], fontsize=10)
+        plt.title('N %i' % n_vect[i] + ',%.2fHz' % maxfr, fontsize=10)
 
     plt.tight_layout()
     filepath = "%s-2dspikebins.png" % basepath
@@ -495,6 +482,35 @@ def plot_2dspikebinstmp(p, s, b, dt, basepath):
     plt.tight_layout()
     filepath = "%s-2dspikebins.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
+
+def plot_pe(p, eof, e, t, basepath):
+
+    fig = plt.figure(figsize=(20,10))
+    ax1 = plt.subplot(1, 2, 1)
+    dim_pcs = p.shape[0]
+    if dim_pcs == 1:
+        ax1.plot(np.linspace(-1,1,eof.shape[0]), eof)
+        ax1.set_ylim([-1,1])
+        plt.title('e%i(p)' % e.shape[0])
+    else:
+        rows = int(np.sqrt(eof.shape[0]))
+        step = (2/(rows-1))/2
+        eofsquare = eof.reshape((rows,rows))
+        im = ax1.imshow(np.flipud(eofsquare), extent=[-1-step, 1+step, -1-step, 1+step], vmin=-0.9, vmax=0.9)
+        fig.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
+        ax1.plot(p[0,:],p[1,:], 'k')
+        plt.title('e%i(p)' % e.shape[0])
+        
+
+    ax2 = plt.subplot(1,2,2)
+    for i in np.arange(e.shape[0]):
+        ax2.plot(t,e[i,:], label='e' + str(i))
+    ax2.set_ylim([-1,1])
+    ax2.legend()
+
+    filepath = "%s-gamma_pe.png" % basepath
+    plt.savefig(filepath, dpi=600, bbox_inches='tight')
+    return plt.gcf()
 
 def plot_errorplot(data, xaxis, title, labels, basepath, ground=None, ynormalized=True, per_cond=None):
 

@@ -11,8 +11,9 @@ def compute_meshgrid(radius, num_bins):
 
     return ppts
 
-def compute_pathloc(path, dt, time_steps, bins):
+def compute_pathloc(path, bins):
     num_bins = bins.shape[1]
+    time_steps = path.shape[1]
     step = np.abs(np.sum(bins[:,0]-bins[:,1])/2)
     pathloc = np.zeros((num_bins,time_steps))
     for j in np.arange(num_bins):

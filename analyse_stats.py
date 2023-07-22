@@ -130,7 +130,7 @@ def analyse_ratemaps_pfs(point):
     neu = point['arg_nb_neurons']
 
     # Compute occupancies    
-    pathloc = compute_pathloc(p, dt, time_steps, bins)
+    pathloc = compute_pathloc(p, bins)
     tb = np.sum(pathloc, axis=1)*dt
     occupancies = tb/np.max(t)
 
