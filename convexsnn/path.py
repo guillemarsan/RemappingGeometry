@@ -4,11 +4,10 @@ import numpy as np
 import time
 
 dt = 0.0001
-tmax = 15 #in s
-time_steps = int(tmax * 1/dt)
 
-def get_path(dpcs, type, path_seed=0):
+def get_path(dpcs, type, tmax, path_seed=0):
     
+    time_steps = int(tmax * 1/dt)
     t = np.arange(time_steps)*dt
 
     ones = np.ones((dpcs,time_steps))
@@ -132,22 +131,28 @@ def get_pathe(p, dim_e, env, flexible=False, variance=-1):
     
     covar = gram(points.T)
 
-    e = np.zeros((dim_e, time_steps))
-    de = np.zeros((dim_e, time_steps))
+    e = np.zeros((dim_e, p.shape[1]))
+    de = np.zeros((dim_e, p.shape[1]))
     for i in np.arange(dim_e): 
         if not flexible:
             np.random.seed(70+i)
             canonic = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
             canonic = canonic/(2*np.max(np.abs(canonic))) # set it [-0.5,05]
             np.random.seed(env+i*50)
-            if variance == -1:# TODO do it with the variance for biased embedding
+            if variance == -1:
                 nu = np.random.uniform(-0.4,0.4) # [-0.9, 0.9]
-                eofp = nu + canonic
+            else:
+                nu = np.random.normal(0, np.max([variance,0.4/2]))
+            eofp = nu + canonic
         else:
             np.random.seed(env+i)
-            if variance == -1:# TODO do it with the variance for biased embedding
+            if variance == -1:
                 eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
                 eofp = 0.9* eofp/(np.max(np.abs(eofp))) # [-0.9,0.9]
+            else:
+                eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),variance*covar)
+
+
 
         # upsample cause gram matrix is limiting
         factor = 50

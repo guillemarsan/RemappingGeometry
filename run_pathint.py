@@ -23,13 +23,13 @@ if __name__ == "__main__":
     parser.add_argument('--path_seed',type=int, default=0,
                         help="Random seed for the path in case of random")
     
-    parser.add_argument("--encoding", type=str, default='parallel',
+    parser.add_argument("--encoding", type=str, default='flexible',
                         help='Determines the type of encoder between rotation, parallel and flexible')
     parser.add_argument("--dim_bbox", type=int, default=8,
                         help="Dimensionality of latent space")
-    parser.add_argument('--env', nargs='+', type=float, default=0,
+    parser.add_argument('--env', nargs='+', type=float, default=1,
                         help="Environment id")
-    parser.add_argument('--embedding_sigma', nargs='+', type=float, default=-1,
+    parser.add_argument('--embedding_sigma', nargs='+', type=float, default=0.01,
                         help="Variance in case of biased embedding (not -1)")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
@@ -68,7 +68,6 @@ if __name__ == "__main__":
     
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
-    
     parser.add_argument("--compute_fr", action='store_true', default=False,
                         help="Compute rough meanfr for quick check")
     parser.add_argument("--plot", action='store_true', default=True,
@@ -85,7 +84,6 @@ if __name__ == "__main__":
     code = ''.join(random.choice(string.ascii_letters) for i in range(5))
     name = timestr + "-" + code + "-" + args.model + "-pcs-" + str(args.dim_pcs) + "-bbox-" + str(args.dim_bbox) + "-n-" + str(args.nb_neurons)
     basepath = args.dir + name
-    results = dict(datetime=timestr, basepath=basepath, args=vars(args))
 
     dbbox = args.dim_bbox
     n = args.nb_neurons
@@ -95,21 +93,18 @@ if __name__ == "__main__":
                     thresh_amp=args.thresh_amp, load_id=args.load_id, conn_seed=args.conn_seed, lognor_seed=args.lognor_seed, lognor_sigma=args.lognor_sigma)
 
     # Construction of the path
+    args.path_tmax = 15 #s
     if args.dim_pcs == 1:
-        path_type = 'ur'
+        args.path_type = 'ur'
     else:
-        path_type = 'usnake'
+        args.path_type = 'usnake'
 
-    
     # Load gamma path
     print('Loading path')
-    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type, path_seed=args.path_seed) 
+    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=args.path_type, tmax=args.path_tmax, path_seed=args.path_seed) 
 
-    # TODO
-    results['nb_steps'] = p.shape[1]
-    results['dt'] = dt
-
-
+    results = dict(datetime=timestr, basepath=basepath, args=vars(args))
+    
     if args.encoding == 'rotation':
         # Only position variables
         g = p
@@ -216,11 +211,9 @@ if __name__ == "__main__":
     if args.save:
         if args.encoding == 'rotation':
             np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
-            results['Th'] = "%s-Th.csv" % name
         
         spike_times = np.argwhere(s)
         np.savetxt("%s-stimes.csv" % basepath, spike_times, fmt='%i')
-        results['stimes'] = "%s-stimes.csv" % name
     
     filepath = "%s.json" % basepath
     with open(filepath, "w") as file_handle:

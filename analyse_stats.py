@@ -78,7 +78,7 @@ def compute_database(basepath):
                 f['arg_'+ args] = value
             del f['args']
 
-            delete_list = ['arg_dir', 'arg_plot', 'arg_gif', 'arg_save']
+            delete_list = ['arg_compute_fr', 'arg_dir', 'arg_plot', 'arg_gif', 'arg_save']
             for d in delete_list:
                 del f[d]
 
@@ -105,7 +105,6 @@ def compute_across(dbase, across, params, func):
 
 def analyse_ratemaps_pfs(point):
 
-    #TODO Eliminate stimes, Th, etc. tags from original 
     id = point['basepath']
     stimes_name = "{0}-stimes.csv".format(id)
     with open(stimes_name) as res_file:
@@ -119,13 +118,11 @@ def analyse_ratemaps_pfs(point):
     s = np.zeros((point['arg_nb_neurons'],point['nb_steps']))
     s[stimes[:,0],stimes[:,1]] = 1
 
-    # TODO
-    # p_seed = set['p_seed']
-    # p_type = set['p_type']
-    p_type = 'uspiral'
-    p_seed = 0
+    path_tmax = point['arg_path_tmax']
+    path_type = point['arg_path_type']
+    path_seed = point['arg_path_seed']
 
-    p, dp, t, dt, time_steps = get_path(dpcs=2, type=p_type, path_seed=p_seed)
+    p, dp, t, dt, time_steps = get_path(dpcs=2, type=path_type, tmax=path_tmax, path_seed=path_seed)
     bins = compute_meshgrid(radius,b)
     neu = point['arg_nb_neurons']
 
@@ -174,8 +171,7 @@ def analyse_classes(set):
 
     i = 1
     for inhib in inhibis_vect[1:]:
-        newclasses = classes
-
+        
         casenow = set['arg_current_amp' == inhib]
         activenow = np.array(eval(casenow['pcsidx']))
 
@@ -250,7 +246,7 @@ def analyse_remapping(set, params):
 def analyse_nrooms(set, point):
 
     neus = set.iloc[0]['arg_nb_neurons']
-    dirs = set['arg_input_dir'].shape[0]
+    dirs = set['arg_env'].shape[0]
 
     nbins=np.arange(dirs+2)
     results_nrooms = np.zeros(int(neus))
@@ -268,7 +264,7 @@ def analyse_overlap(set, point):
         if shuffle: m1 = m1[np.random.permutation(m1.shape[0])]
         return np.sum(m1*m2)/(np.linalg.norm(m1)*np.linalg.norm(m2))
     
-    dirs = set['arg_input_dir'].shape[0]
+    dirs = set['arg_env'].shape[0]
     neu = set.iloc[0]['arg_nb_neurons']
     meanfr = np.zeros((neu, dirs))
     i = 0
@@ -468,7 +464,7 @@ elif compute == 'placecells':
     df = compute_per_simulation(dbase, params, lambdafunc)
 elif compute == 'remapping':
     lambdafunc = lambda x, gb: analyse_remapping(x,gb)
-    df = compute_across(dbase, 'arg_input_dir', params, lambdafunc)
+    df = compute_across(dbase, 'arg_env', params, lambdafunc)
 elif compute == 'recruitment':
     lambdafunc = lambda x, params: analyse_recruitment(x, params)
     df = compute_per_simulation(dbase, params, lambdafunc)
