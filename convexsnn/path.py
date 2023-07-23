@@ -101,7 +101,7 @@ def get_path(dpcs, type, path_seed=0):
         print(np.max(dp))    
     return p, dp, t, dt, time_steps
 
-def get_pathe(p, dim_e, env, flexible=False):
+def get_pathe(p, dim_e, env, flexible=False, variance=-1):
 
     def gram(x):
         sigma = 0.75
@@ -116,7 +116,7 @@ def get_pathe(p, dim_e, env, flexible=False):
             points = np.linspace(-1,1,num_bins).reshape(1,-1)
             step = (2/(num_bins-1))/2
         else:
-            sqrtnum_bins = np.sqrt(num_bins)
+            sqrtnum_bins = int(np.sqrt(num_bins))
             points = np.linspace(-1,1,sqrtnum_bins)
             step = (2/(sqrtnum_bins-1))/2
             points = np.array(np.meshgrid(points,points)).reshape(2,-1)
@@ -140,14 +140,14 @@ def get_pathe(p, dim_e, env, flexible=False):
             canonic = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
             canonic = canonic/(2*np.max(np.abs(canonic))) # set it [-0.5,05]
             np.random.seed(env+i*50)
-            # TODO do it with the variance for biased embedding
-            nu = np.random.uniform(-0.4,0.4) # [-0.9, 0.9]
-            eofp = nu + canonic
+            if variance == -1:# TODO do it with the variance for biased embedding
+                nu = np.random.uniform(-0.4,0.4) # [-0.9, 0.9]
+                eofp = nu + canonic
         else:
             np.random.seed(env+i)
-            # TODO do it with the variance for biased embedding
-            eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
-            eofp = 0.9* eofp/(np.max(np.abs(eofp))) # [-0.9,0.9]
+            if variance == -1:# TODO do it with the variance for biased embedding
+                eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
+                eofp = 0.9* eofp/(np.max(np.abs(eofp))) # [-0.9,0.9]
 
         # upsample cause gram matrix is limiting
         factor = 50

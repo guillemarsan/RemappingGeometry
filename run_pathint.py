@@ -11,45 +11,40 @@ from convexsnn.AngleEncoder import AngleEncoder
 
 from convexsnn.embedding import get_embedding
 from convexsnn.network import get_model
-from convexsnn.current import get_current
+from convexsnn.current import get_noise, get_current
 from convexsnn.path import get_path, get_pathe
 import convexsnn.plot as plot
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=1,
-                        help="Dimensionality of inputs")
-    parser.add_argument("--model", type=str, default='randclosed-load-polyae',
-                        help="Type of model")  
-    parser.add_argument('--conn_seed',type=int, default=0,
-                        help="Random seed for the connectivity in case of random") 
-    parser.add_argument("--nb_neurons", type=int, default=256,
-                        help="Number of neurons")
+    parser.add_argument("--dim_pcs", type=int, default=2,
+                        help="Dimensionality of space")
+    parser.add_argument('--path_seed',type=int, default=0,
+                        help="Random seed for the path in case of random")
+    
     parser.add_argument("--encoding", type=str, default='parallel',
                         help='Determines the type of encoder between rotation, parallel and flexible')
     parser.add_argument("--dim_bbox", type=int, default=8,
-                        help="Dimensionality of outputs") 
-    parser.add_argument("--load_id", type=int, default=1,
-                        help="In case of load, id of the bbox to load")
+                        help="Dimensionality of latent space")
     parser.add_argument('--env', nargs='+', type=float, default=0,
                         help="Environment id")
+    parser.add_argument('--embedding_sigma', nargs='+', type=float, default=-1,
+                        help="Variance in case of biased embedding (not -1)")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
     parser.add_argument("--input_scale", action='store_true', default=True,
-                        help="Scale the input by sqrtdbbox")
-    parser.add_argument("--cod_scale", type=float, default=0.5,
-                        help="Periodicity of the Torus encoding")
-    parser.add_argument("--cod_type", type=str, default='square',
-                        help="Type of Torus encoding (square, twisted, rhombus, 6D)")
-    parser.add_argument('--embed_affine', action='store_true', default=False,
-                        help="The embedding happens in an affine way")
-    parser.add_argument('--current_neurons', nargs='+',type=float,default=[0],
-                        help="Neurons to recieve input current")
-    parser.add_argument('--current_amp', type=float, default=0.,
-                        help="Amplitude of the current input")
-    parser.add_argument("--noise_amp", type=float, default=0.,
-                        help="Amplitude of noise")
+                        help="Scale the input by sqrtdbbox") 
+    
+    
+    parser.add_argument("--nb_neurons", type=int, default=256,
+                        help="Number of neurons")
+    parser.add_argument("--model", type=str, default='randclosed-load-polyae',
+                        help="Type of model")  
+    parser.add_argument('--conn_seed',type=int, default=0,
+                        help="Random seed for the connectivity in case of random")
+    parser.add_argument("--load_id", type=int, default=1,
+                        help="Id of the connectivity in case of load") 
     parser.add_argument("--decoder_amp", type=float, default=0.2,
                         help="Amplitude of decoder matrix D")
     parser.add_argument("--thresh_amp", type=float, default=1.5,
@@ -57,11 +52,23 @@ if __name__ == "__main__":
     parser.add_argument('--lognor_seed',type=int, default=0,
                         help="The thresholds are taken from a lognormal distribution if not 0") 
     parser.add_argument('--lognor_sigma',type=float, default=0.2,
-                        help="The variance of the lognormal for sampling thresholds")                   
-    parser.add_argument("--seed", type=int, default=666,
+                        help="The variance of the lognormal for sampling thresholds")
+    
+    parser.add_argument("--noise_seed", type=int, default=0,
                         help="Random seed")
+    parser.add_argument("--noise_amp", type=float, default=0.,
+                        help="Amplitude of noise")
+    
+    parser.add_argument('--current_per', nargs='+',type=float,default=0.5,
+                        help="Percentage of neurons to recieve input current")
+    parser.add_argument('--current_seed', nargs='+',type=float,default=0,
+                        help="Random seed for neurons to recieve input current")
+    parser.add_argument('--current_amp', type=float, default=-100.,
+                        help="Amplitude of the current input")
+    
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
+    
     parser.add_argument("--compute_fr", action='store_true', default=False,
                         help="Compute rough meanfr for quick check")
     parser.add_argument("--plot", action='store_true', default=True,
@@ -96,7 +103,7 @@ if __name__ == "__main__":
     
     # Load gamma path
     print('Loading path')
-    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type) 
+    p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=path_type, path_seed=args.path_seed) 
 
     # TODO
     results['nb_steps'] = p.shape[1]
@@ -116,7 +123,7 @@ if __name__ == "__main__":
 
         # Construction of Theta(e)
         print('Embedding input...')
-        Theta = get_embedding(dbbox, dinput=dinput, env=args.env, variance=0)  
+        Theta = get_embedding(dbbox, dinput=dinput, env=args.env, variance=args.embedding_sigma)  
         
         # Embedd
         x = Theta @ k
@@ -124,7 +131,7 @@ if __name__ == "__main__":
     else:
         # Also environment variables
         dim_e = int((dbbox - 2*args.dim_pcs)/2)
-        e, de, eofp = get_pathe(p, dim_e, args.env, flexible=args.encoding=='flexible')
+        e, de, eofp = get_pathe(p, dim_e, args.env, flexible=args.encoding=='flexible', variance=args.embedding_sigma)
         g = np.vstack([p,e])
         dg = np.vstack([dp,de])
 
@@ -146,9 +153,11 @@ if __name__ == "__main__":
         x = args.input_amp*x
         dx = args.input_amp*dx
 
-    # Construction of the current manipulation (noise + experiment)
-    np.random.seed(seed=args.seed)
-    I, b = get_current(dbbox, t, G, args.noise_amp, args.current_neurons, args.current_amp, vect='neuron', rseed=args.seed)
+    # Noise
+    I, b = get_noise(dbbox, t, G, noise_amp=args.noise_amp, noise_seed=args.noise_seed)
+    
+    # Current manipulation
+    I += get_current(n, t, current_per=args.current_per, current_amp=args.current_amp, current_seed=args.current_seed)
 
     # Bias correction for D
     input_amp = np.sqrt(dbbox)*args.input_amp if args.input_scale else args.input_amp
@@ -162,7 +171,7 @@ if __name__ == "__main__":
     V0 = model.F @ x0 - G @ x_hat0
 
     decoder = lambda r, i: D @ r - b[:,i] / model.lamb
-    V, s, r, x_hat = model.simulate_pathint(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+    V, s, r, x_hat = model.simulate_pathint_one(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
     args.integrator = 'pathint'
     
     # Decode
