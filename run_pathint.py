@@ -52,7 +52,7 @@ if __name__ == "__main__":
                         help="Amplitude of noise")
     parser.add_argument("--decoder_amp", type=float, default=0.2,
                         help="Amplitude of decoder matrix D")
-    parser.add_argument("--thresh_amp", type=float, default=1.25,
+    parser.add_argument("--thresh_amp", type=float, default=1.5,
                         help="Amplitude of the thresholds")    
     parser.add_argument('--lognor_seed',type=int, default=0,
                         help="The thresholds are taken from a lognormal distribution if not 0") 
@@ -116,8 +116,7 @@ if __name__ == "__main__":
 
         # Construction of Theta(e)
         print('Embedding input...')
-        Theta = get_embedding(dbbox, dinput=dinput, env=args.env, input_amp=args.input_amp, 
-                              variance=-1, input_scale=args.input_scale)  
+        Theta = get_embedding(dbbox, dinput=dinput, env=args.env, variance=0)  
         
         # Embedd
         x = Theta @ k
@@ -139,6 +138,14 @@ if __name__ == "__main__":
         x = k
         dx = dk
 
+    # Scale of input
+    if args.input_scale:
+        x = np.sqrt(dbbox)*x
+        dx = np.sqrt(dbbox)*dx
+    else:
+        x = args.input_amp*x
+        dx = args.input_amp*dx
+
     # Construction of the current manipulation (noise + experiment)
     np.random.seed(seed=args.seed)
     I, b = get_current(dbbox, t, G, args.noise_amp, args.current_neurons, args.current_amp, vect='neuron', rseed=args.seed)
@@ -156,7 +163,7 @@ if __name__ == "__main__":
 
     decoder = lambda r, i: D @ r - b[:,i] / model.lamb
     V, s, r, x_hat = model.simulate_pathint(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
-    args.integrator = 'one'
+    args.integrator = 'pathint'
     
     # Decode
     x_hat = bias_corr*x_hat
@@ -167,8 +174,12 @@ if __name__ == "__main__":
 
     # Save results 
     print('Saving results...')
-    results['tracking_error'] = np.mean(np.linalg.norm(x_hat - x, axis=0))
-    results['spatial_tracking_error'] = np.mean(np.linalg.norm(g_hat - g, axis=0))
+    results['x_error'] = np.mean(np.linalg.norm(x_hat - x, axis=0))
+    results['k_error'] = np.mean(np.linalg.norm(k_hat - k, axis=0))
+    results['g_error'] = np.mean(np.linalg.norm(g_hat - g, axis=0))
+    if args.encoding != 'rotation':
+        results['p_error'] = np.mean(np.linalg.norm(g_hat[:args.dim_pcs,:] - g[:args.dim_pcs,:], axis=0))
+        results['e_error'] = np.mean(np.linalg.norm(g_hat[args.dim_pcs:,:] - g[args.dim_pcs:,:], axis=0))
 
     # PCs
     active_list = np.any(s,axis=1)
@@ -182,7 +193,7 @@ if __name__ == "__main__":
         print('Computing firing rates...')
         ft = 1
         m = int(ft/dt)
-        filter = np.ones(m)
+        filter = np.ones(m)/ft
         fr = np.apply_along_axis(lambda m: np.convolve(m, filter, mode='same'), axis=1, arr=s)
         maxfr = np.max(fr[active_list,:], axis=1)
         if np.max(maxfr) <= ft/1e-3:
