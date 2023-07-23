@@ -1,8 +1,10 @@
 import scipy
+import scipy.signal, scipy.ndimage
 import numpy as np
+import time
 
 dt = 0.0001
-tmax = 3 #in s
+tmax = 15 #in s
 time_steps = int(tmax * 1/dt)
 
 def get_path(dpcs, type, path_seed=0):
@@ -102,24 +104,32 @@ def get_path(dpcs, type, path_seed=0):
 def get_pathe(p, dim_e, env, flexible=False):
 
     def gram(x):
-        sigma = 0.5
+        sigma = 0.75
         condensed_dist = scipy.spatial.distance.pdist(x)
         dist = scipy.spatial.distance.squareform(condensed_dist)
         gram = np.exp(-1 * (dist ** 2) / (2*sigma))
         return gram
     
+    def mesh(num_bins, dim_pcs):
+
+        if dim_pcs == 1:
+            points = np.linspace(-1,1,num_bins).reshape(1,-1)
+            step = (2/(num_bins-1))/2
+        else:
+            sqrtnum_bins = np.sqrt(num_bins)
+            points = np.linspace(-1,1,sqrtnum_bins)
+            step = (2/(sqrtnum_bins-1))/2
+            points = np.array(np.meshgrid(points,points)).reshape(2,-1)
+
+        return step, points
+
+    
     dim_pcs = p.shape[0]
     sqrtnum_bins = 21
-    num_bins = sqrtnum_bins ** 2
-    
-    if dim_pcs == 1:
-        points = np.linspace(-1,1,num_bins).reshape(1,-1)
-        step = (2/(num_bins-1))/2
-    else:
-        points = np.linspace(-1,1,sqrtnum_bins)
-        step = (2/(sqrtnum_bins-1))/2
-        points = np.array(np.meshgrid(points,points)).reshape(2,-1)
+    num_bins = sqrtnum_bins**2
 
+    step, points = mesh(num_bins, dim_pcs)
+    
     covar = gram(points.T)
 
     e = np.zeros((dim_e, time_steps))
@@ -139,11 +149,55 @@ def get_pathe(p, dim_e, env, flexible=False):
             eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
             eofp = 0.9* eofp/(np.max(np.abs(eofp))) # [-0.9,0.9]
 
-        
-        for j in np.arange(num_bins):
-            dist = np.max(np.abs(np.expand_dims(points[:,j],-1)-p), axis=0) # Manhattan distance
-            e[i,np.argwhere(dist < step)] = eofp[j]
+        # upsample cause gram matrix is limiting
+        factor = 50
+        if dim_pcs == 1:
+            eofp = np.repeat(eofp, factor)
+
+            filter = np.ones(factor)/factor
+            eofp = scipy.ndimage.convolve1d(eofp, filter, mode='nearest')
+
+            step_up, points_up = mesh(factor*num_bins, dim_pcs)
+        else:
+            eofp = eofp.reshape((sqrtnum_bins,sqrtnum_bins))
+            eofp = np.repeat(np.repeat(eofp, factor, axis=0), factor, axis=1)
+
+            filter = np.ones((factor,factor))/(factor**2)
+
+            t0 = time.time()
+            eofp = scipy.signal.convolve2d(eofp, filter, mode='same', boundary='symm')
+            t1 = time.time()
+            print(t1-t0)
+            
+            step_up, points_up = mesh(factor**2*num_bins, dim_pcs)
+
+        # Get path intersection
+        # t0 = time.time()
+        # eofplin = eofp.reshape(-1,)
+        # for j in np.arange(eofplin.shape[0]):
+        #     dist = np.max(np.abs(np.expand_dims(points_up[:,j],-1)-p), axis=0) # Manhattan distance
+        #     de[i,np.argwhere(dist < step_up)] = eofplin[j]
+        # t1 = time.time()
+        # print(t1-t0)
+
+        if dim_pcs == 1:
+            t0 = time.time()
+            origin = np.array([-1])[:,np.newaxis]
+            idcs = (np.abs(p - origin) // (2*step_up)).astype(int)
+            e[i,:] = eofp[idcs]
+            t1 = time.time()
+            print(t1-t0)
+
+        else:
+            t0 = time.time()
+            origin = np.array([-1,1])[:,np.newaxis]
+            idcs = (np.abs(p - origin) // (2*step_up)).astype(int)
+            e[i,:] = eofp[idcs[0,:],idcs[1,:]]
+            t1 = time.time()
+            print(t1-t0)
 
         aux = np.diff(e[i,:])/dt
         de[i,:] = np.append(aux,aux[-1])
+        print(np.max(de[i,:]))
+        print(np.min(de[i,:]))
     return e, de, eofp

@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from scipy import ndimage 
 
 def compute_meshgrid(radius, num_bins):
@@ -16,9 +17,12 @@ def compute_pathloc(path, bins):
     time_steps = path.shape[1]
     step = np.abs(np.sum(bins[:,0]-bins[:,1])/2)
     pathloc = np.zeros((num_bins,time_steps))
-    for j in np.arange(num_bins):
-        dist = np.max(np.abs(np.expand_dims(bins[:,j],-1)-path), axis=0) # Manhattan distance
-        pathloc[j,np.argwhere(dist < step)] = 1
+
+    origin = np.array([-1,1])[:,np.newaxis]
+    idcs = (np.abs(path - origin) // (2*step)).astype(int)
+    j = idcs[0,:] + int(np.sqrt(num_bins))*idcs[1,:]
+    pathloc[j,np.arange(time_steps)] = 1
+
     return pathloc.astype(int)
 
 def compute_ratemap(spikes, pathloc, tb):

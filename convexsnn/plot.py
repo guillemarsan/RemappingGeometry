@@ -169,13 +169,14 @@ def plot_neuroscience(x, y, V, s, t, basepath, n_vect, T=None):
 
     plt.figure(figsize=(20,10))
     matplotlib.rcParams.update({'font.size': 22})
+    c = plt.rcParams['axes.prop_cycle'].by_key()['color'] # color=c[i%10]
     t_ms = t * 1000
     ax1 = plt.subplot(3, 1, 1)
     for i in range(y.shape[0]):
-        ax1.plot(t_ms,y[i,:], label='y' + str(i) if i < 16 else '_nolegend_')
+        ax1.plot(t_ms,y[i,:], label='y' + str(i) if i < 16 else '_nolegend_', color=c[i%10], alpha=0.5)
     for i in range(x.shape[0]):
-        ax1.plot(t_ms,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_')
-    ax1.legend(loc='upper right')
+        ax1.plot(t_ms,x[i,:], label= 'x' + str(i) if i < 16 else '_nolegend_', color=c[i%10])
+    ax1.legend(loc='upper right', fontsize=7)
     ax1.set_ylabel('Input x')
     ax1.set_xlabel('Time(s)')
 
@@ -191,7 +192,7 @@ def plot_neuroscience(x, y, V, s, t, basepath, n_vect, T=None):
         ax2.plot(t_ms,V[n_vect[i],:], label='V' + str(n_vect[i]) if i < 16 else '_nolegend_', color=c.to_rgba(i))
     if T is not None:
         ax2.plot(t_ms,T*np.ones_like(t_ms),'k--')
-    ax2.legend(loc='upper right')
+    ax2.legend(loc='upper right', fontsize=7)
     ax2.set_ylabel('V(mV)')
     ax2.set_xlabel('t(ms)')
 
@@ -313,7 +314,7 @@ def plot_1drfs(p, fr, dt, basepath, n_vect):
     c = matplotlib.cm.ScalarMappable(norm=cNorm, cmap=jet)
     for i in range(n_vect.shape[0]):
         plt.plot(p[0,:], fr[n_vect[i],:], label='r' + str(n_vect[i]) if i < 16 else '_nolegend_', color=c.to_rgba(i))
-    plt.legend()
+    plt.legend(fontsize=7)
     #plt.xlim(np.min(p),np.max(p))
     plt.ylabel('Firing rate (Hz)')
     plt.xlabel('Position (m)')
@@ -333,7 +334,7 @@ def plot_1drfsth(D, x, p, basepath):
 
     colors = c[np.argmax(dotprod, axis=0)%10]
     plt.scatter(p, np.ones_like(p)*np.max(dotprod)+0.05, color=colors)
-    plt.legend()
+    plt.legend(fontsize=7)
     plt.xlim(np.min(p),np.max(p))
     plt.ylabel('r')
     plt.xlabel('p')
@@ -430,7 +431,7 @@ def plot_2dspikebins(p, s, dt, b, basepath, n_vect):
     plt.figure(figsize=(7,7))
     n = n_vect.shape[0]
 
-    radius = (np.max(p)-np.min(p))/2
+    radius = 1
         
     bins = compute_meshgrid(radius, b)
     
@@ -483,20 +484,19 @@ def plot_2dspikebinstmp(p, s, b, dt, basepath):
     filepath = "%s-2dspikebins.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
-def plot_pe(p, eof, e, t, basepath):
+def plot_pe(p, eofp, e, t, basepath):
 
     fig = plt.figure(figsize=(20,10))
     ax1 = plt.subplot(1, 2, 1)
     dim_pcs = p.shape[0]
     if dim_pcs == 1:
-        ax1.plot(np.linspace(-1,1,eof.shape[0]), eof)
+        ax1.plot(np.linspace(-1,1,eofp.shape[0]), eofp)
         ax1.set_ylim([-1,1])
-        plt.title('e%i(p)' % e.shape[0])
+        plt.title('e%i(p)' % (e.shape[0]-1))
     else:
-        rows = int(np.sqrt(eof.shape[0]))
+        rows = int(np.sqrt(eofp.shape[0]))
         step = (2/(rows-1))/2
-        eofsquare = eof.reshape((rows,rows))
-        im = ax1.imshow(np.flipud(eofsquare), extent=[-1-step, 1+step, -1-step, 1+step], vmin=-0.9, vmax=0.9)
+        im = ax1.imshow(eofp, extent=[-1, 1, -1, 1], vmin=-0.9, vmax=0.9)
         fig.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
         ax1.plot(p[0,:],p[1,:], 'k')
         plt.title('e%i(p)' % e.shape[0])
