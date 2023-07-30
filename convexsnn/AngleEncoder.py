@@ -1,34 +1,38 @@
 import numpy as np
 class AngleEncoder():
 
-    def encode(self, g, dg):
+    def encode(self, g, dg=None):
         
         dim = g.shape[0]
         
         # pe to alpha
         cycles = np.pi/2
         alpha = cycles * (g + 1)
-        dalpha = cycles * dg
+        if dg is not None: dalpha = cycles * dg
 
         # alpha to S1
         time_steps = g.shape[1]
         k = np.zeros((2*dim,time_steps))
-        dk = np.zeros((2*dim,time_steps))
+        if dg is not None: dk = np.zeros((2*dim,time_steps))
         
         j = 0
         for i in np.arange(dim):
             k[j,:] = np.cos(alpha[i,:])
             k[j+1,:] = np.sin(alpha[i,:])
 
-            dk[j,:] = -np.sin(alpha[i,:])*dalpha[i,:]
-            dk[j+1,:] = np.cos(alpha[i,:])*dalpha[i,:]
+            if dg is not None:
+                dk[j,:] = -np.sin(alpha[i,:])*dalpha[i,:]
+                dk[j+1,:] = np.cos(alpha[i,:])*dalpha[i,:]
             j += 2
     
         # Normalize
         k = 1/np.sqrt(dim)*k
-        dk = 1/np.sqrt(dim)*dk
+        if dg is not None: dk = 1/np.sqrt(dim)*dk
 
-        return k, dk
+        if dg is not None:
+            return k, dk
+        else:
+            return k
 
     def decode(self, s_hat):
 
