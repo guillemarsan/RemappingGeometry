@@ -1,6 +1,7 @@
 from operator import ne
 import pathlib, argparse, json, time
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import numpy as np
@@ -45,8 +46,8 @@ def make_plot(ptype, data, title, axis_labels, basepath, ynormalized=False, equa
             conditions.append(point['legend'])
 
             plt.bar(i, mean, width=0.5, align='center')
-            plt.errorbar(i, mean, std)
-            plt.hlines(meanshuff, i-0.1, i+0.1, colors='r')
+            plt.errorbar(i, mean, std, ecolor='black',capsize=10)
+            plt.hlines(meanshuff, i-0.6, i+0.6, colors='r')
             i += 1
 
         plt.xticks(np.arange(i-1)+1, conditions)
@@ -57,8 +58,8 @@ def make_plot(ptype, data, title, axis_labels, basepath, ynormalized=False, equa
             datashuff = point['datashuff']
 
             
-            plt.scatter(data[:,0],data[:,1], label='Pairs')
-            plt.scatter(datashuff[:,0], datashuff[:,1], label='Shuffle')
+            plt.scatter(data[:,0],data[:,1], alpha=0.7, label='Pairs')
+            plt.scatter(datashuff[:,0], datashuff[:,1], alpha=0.7, label='Shuffle')
 
         plt.xlim(0,1.1)
 
@@ -66,17 +67,19 @@ def make_plot(ptype, data, title, axis_labels, basepath, ynormalized=False, equa
 
         c = plt.rcParams['axes.prop_cycle'].by_key()['color']
         cases = len(data)
+        neurons = data.iloc[0]['neurons']
+        num_neurons = neurons.shape[0]
         i = 1
         for _, point in data.iterrows():
             pfs = point['pfs']
 
             axsub = plt.subplot(1, cases, i)
-            axsub.set_title(point['legend'])
+            axsub.set_title(point['legend'], fontsize=7)
             axsub.set_xticks([])
             axsub.set_yticks([])
 
             maxFR = np.max(pfs)
-            for cell in np.arange(pfs.shape[0]):
+            for cell in np.arange(num_neurons):
 
                 cmap = colors.ListedColormap(['white', c[cell]])
                 bounds=[0,0,maxFR]
@@ -86,10 +89,11 @@ def make_plot(ptype, data, title, axis_labels, basepath, ynormalized=False, equa
                 sqrtb = int(np.sqrt(pfs.shape[1]))
                 pf = pf.reshape((sqrtb,sqrtb))
                 alphas = pf/np.max(pf) if np.max(pf) > 0 else 0
-                axsub.imshow(pf, alpha=alphas, cmap=cmap, norm=norm)
+                im = axsub.imshow(pf, alpha=alphas, cmap=cmap, norm=norm)
             i += 1
 
-
+        patches = [matplotlib.patches.Patch(color=c[i], label='N%i' % n) for i,n in enumerate(neurons) ]
+        plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. , prop={'size': 6})
     if ptype != 'pfs':
         plt.title(title, fontsize=10)
         plt.xlabel(axis_labels[0], fontsize=10)
@@ -206,7 +210,7 @@ def prepare_combine(df, across, data_label, xaxis_label):
     newdf = gb.apply(lambda x: combinelambda(x))
     return newdf 
 
-def prepare_pfs(df, visualize, labels):
+def prepare_pfs(df, neurons, visualize, labels):
 
     # Read the pfs
     newdf = pd.DataFrame([])
@@ -219,6 +223,7 @@ def prepare_pfs(df, visualize, labels):
             t1 = time.time()
             print(t1-t0)
         newpoint['pfs'] = pfs[neurons, :]
+        newpoint['neurons'] = neurons
        
         legend = ''
         j = 0
@@ -237,7 +242,7 @@ def prepare_pfs(df, visualize, labels):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='NormalizedMiliTorusPCS2',
+    parser.add_argument("--dir", type=str, default='Test7',
                         help="Directory to read and write files")
     parser.add_argument("--plot", type=str, default='placefields',
                         help = 'Which plot to make')
@@ -270,14 +275,14 @@ print ("Plotting results...")
 
 if plot == 'placefields':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
-    labels = ['d', 'n', 'l', 'dir']
-    params_sweep = [(4,64,0,'[0.0]'), (4,64,1,'[0.0]')]
+    visualize = ['arg_env', 'arg_encoding']
+    labels = ['e', 'enc']
+    params_sweep = [(0,'parallel'), (3,'parallel')]
     tags = ['pfs']
-    neurons = np.array([2, 3, 4, 5])
+    neurons = np.array([161,162,190,203])
     
     df = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_pfs(df, visualize, labels)
+    newdf = prepare_pfs(df, neurons, visualize, labels)
 
     title = ''
     axis_labels = []
@@ -289,9 +294,9 @@ if plot == 'placefields':
 #### Place cell plots #############
 elif plot == 'spatialinfo':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
-    labels = ['d', 'n', 'l', 'dir']
-    params_sweep = [(4,64,0,'[0.0]')]
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id', 'arg_encoding']
+    labels = ['d', 'e', 'n', 'l']
+    params_sweep = [(8,0,256,0,'rotation')]
     tags = ['spatialinfo', 'spatialinfo_bins']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -308,11 +313,11 @@ elif plot == 'nrooms':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons']
     labels = ['d', 'n']
-    params_sweep = [(4,64),(8,128)]
+    params_sweep = [(8,256)]
     tags = ['nrooms', 'nrooms_bins']
 
     df = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_combine(df, across=True, data_label='nrooms', xaxis_label='nrooms_bins')
+    newdf = prepare_combine(df, across=True, data_label=['nrooms'], xaxis_label='nrooms_bins')
 
     title = 'Percentage of neurons active in n rooms'
     axis_labels = ['Number of rooms', 'Percentage of PCs']
@@ -321,9 +326,9 @@ elif plot == 'nrooms':
 
 elif plot == 'overlap':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_encoding']
     labels = ['d', 'n', 'l']
-    params_sweep = [(4,64,0), (8,128,1)]
+    params_sweep = [(16,512,'rotation'),(16,512,'parallel'),(8,256,'flexible')]
     tags = ['overlap', 'overlapshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -336,9 +341,9 @@ elif plot == 'overlap':
 
 elif plot == 'spatialcorr':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_encoding']
     labels = ['d', 'n', 'l']
-    params_sweep = [(4,64,0), (8,128,1)]
+    params_sweep = [(8,256,'rotation'),(16,512,'parallel'),(8,256,'flexible')]
     tags = ['spatialcorr', 'spatialcorrshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -353,7 +358,7 @@ elif plot == 'variance_remap':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'l']
-    params_sweep = [(4,64,0), (4,64,1)]
+    params_sweep = [(8,256,0)]
     tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -375,7 +380,7 @@ elif plot == 'multispatialcorr':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'l']
-    params_sweep = [(4,64,0)]
+    params_sweep = [(8,256,0)]
     tags = ['multispatialcorr', 'multispatialcorrshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -390,9 +395,9 @@ elif plot == 'multispatialcorr':
 
 elif plot == 'meanfr_perclass':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'I']
-    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    params_sweep = [(4,0,64,0),(4,0,64,1)]
     tags = ['meanfr_permanent', 'meanfr_tagged', 'meanfr_recruited', 'meanfr_silent']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -412,9 +417,9 @@ elif plot == 'meanfr_perclass':
 
 elif plot == 'decoding_error':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'I']
-    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    params_sweep = [(4,0,64,0),(4,0,64,1)]
     tags = ['decoding_error']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -434,9 +439,9 @@ elif plot == 'decoding_error':
 
 elif plot == 'fr':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'I']
-    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    params_sweep = [(4,0,64,0),(4,0,64,1)]
     tags = ['meanfr', 'maxfr']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -456,9 +461,9 @@ elif plot == 'fr':
 
 elif plot == 'pfsize':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'I']
-    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    params_sweep = [(4,0,64,0),(4,0,64,1)]
     tags = ['pfsize']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -478,9 +483,9 @@ elif plot == 'pfsize':
 
 elif plot == 'pfsize_perclass':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'I']
-    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    params_sweep = [(4,0,64,0),(4,0,64,1)]
     tags = ['pfsize_permanent', 'pfsize_tagged','pfsize_recruited','pfsize_silent']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -500,9 +505,9 @@ elif plot == 'pfsize_perclass':
 
 elif plot == 'perpcs_perclass':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'I']
-    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    params_sweep = [(4,0,64,0),(4,0,64,1)]
     tags = ['perpcs_permanent', 'perpcs_tagged','perpcs_recruited','perpcs_silent']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -522,9 +527,9 @@ elif plot == 'perpcs_perclass':
 
 elif plot == 'coveredarea_perclass':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_input_dir']
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'I']
-    params_sweep = [(4,64,0,'[0.0]'),(4,64,1,'[0.0]')]
+    params_sweep = [(4,0,64,1),(4,0,64,1)]
     tags = ['coveredarea', 'coveredarea_permanent', 'coveredarea_tagged','coveredarea_recruited','coveredarea_silent']
 
     df = filter(df, visualize, params_sweep, tags)
