@@ -242,9 +242,9 @@ def prepare_pfs(df, neurons, visualize, labels):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='Test7',
+    parser.add_argument("--dir", type=str, default='TestPerTuning',
                         help="Directory to read and write files")
-    parser.add_argument("--plot", type=str, default='placefields',
+    parser.add_argument("--plot", type=str, default='spatialcorr_pertuning',
                         help = 'Which plot to make')
     
 
@@ -263,7 +263,7 @@ if plot in {'placefields'}:
     df = load_dataframe('database', basepath)
 elif plot in {'spatialinfo'}:
     df = load_dataframe('placecells', basepath)
-elif plot in {'nrooms', 'overlap', 'spatialcorr', 'variance_remap', 'multispatialcorr'}:
+elif plot in {'nrooms', 'overlap', 'spatialcorr', 'variance_remap', 'multispatialcorr', 'frdistance_pertuning', 'spatialcorr_pertuning'}:
     df = load_dataframe('remapping', basepath)
 else:
     df = load_dataframe('recruitment', basepath)
@@ -328,7 +328,7 @@ elif plot == 'overlap':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_encoding']
     labels = ['d', 'n', 'l']
-    params_sweep = [(16,512,'rotation'),(16,512,'parallel'),(8,256,'flexible')]
+    params_sweep = [(16,512,'rotation'),(16,512,'parallel'),(16,512,'flexible')]
     tags = ['overlap', 'overlapshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -343,7 +343,7 @@ elif plot == 'spatialcorr':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_encoding']
     labels = ['d', 'n', 'l']
-    params_sweep = [(8,256,'rotation'),(16,512,'parallel'),(8,256,'flexible')]
+    params_sweep = [(16,512,'rotation'),(16,512,'parallel'),(16,512,'flexible')]
     tags = ['spatialcorr', 'spatialcorrshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -380,7 +380,7 @@ elif plot == 'multispatialcorr':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
     labels = ['d', 'n', 'l']
-    params_sweep = [(8,256,0)]
+    params_sweep = [(16,512,0)]
     tags = ['multispatialcorr', 'multispatialcorrshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -390,6 +390,36 @@ elif plot == 'multispatialcorr':
     axis_labels = ['Environment 1', 'Environment 2'] 
     print("Plotting results...")
     make_plot('scatter', newdf, title, axis_labels, name, ynormalized=True, equal=True)
+
+elif plot == 'frdistance_pertuning':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    labels = ['d', 'n', 'l']
+    params_sweep = [(16,512,0)]
+    tags = ['frdistance_pertuning', 'frdistance_pertuningshuff']
+
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(df, tags,['data','datashuff'], labels, visualize)
+    
+    title = 'Distance of FRs vs place tuning alignment'
+    axis_labels = ['Place tuning alignment', 'Distance of FRs'] 
+    print("Plotting results...")
+    make_plot('scatter', newdf, title, axis_labels, name)
+
+elif plot == 'spatialcorr_pertuning':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    labels = ['d', 'n', 'l']
+    params_sweep = [(16,512,0)]
+    tags = ['spatialcorr_pertuning', 'spatialcorr_pertuningshuff']
+
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(df, tags,['data','datashuff'], labels, visualize)
+    
+    title = 'Spatial correlation vs place tuning alignment'
+    axis_labels = ['Place tuning alignment', 'Spatial corr.'] 
+    print("Plotting results...")
+    make_plot('scatter', newdf, title, axis_labels, name)
 
 #### Recruitment plots #############
 

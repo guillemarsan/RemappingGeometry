@@ -5,13 +5,14 @@ import numpy as np
 import time
 import pandas as pd
 from convexsnn.path import get_path
+from convexsnn.network import get_model
 
 ##################### STANDARDS ###################################
 
-b = 100 #number of bins
+b = 400 #number of bins
 radius = 1 #radius of the environment
 bin_size = (2*radius)**2/b #bin_size
-tostore = lambda array: np.array2string(array, separator=',', suppress_small=True, max_line_width=np.inf)
+tostore = lambda array: np.array2string(array, separator=',', suppress_small=True, threshold=np.inf, max_line_width=np.inf)
 
 ##################### DATA LOAD ###################################
 def read_matrix(path,f,matrix='s'):
@@ -58,6 +59,14 @@ def read_pfs(set, neu, b, dirs):
         i += 1
 
     return all_pfs
+
+def read_D(point, neu, dbbox):
+
+    D = np.zeros((neu, dbbox))
+    _, D, _ = get_model(dbbox ,neu, dbbox, connectivity=point['arg_model'], decod_amp=point['arg_decoder_amp'], 
+                    load_id=point['arg_load_id'], conn_seed=point['arg_conn_seed'])
+    
+    return D
 
 
 ##################### COMPUTES ####################################
@@ -241,7 +250,20 @@ def analyse_remapping(set, params):
 
     analyse_spatialcorr(point, all_pfs)
     analyse_multispatialcorr(point, all_pfs)
+
+    dbbox = set.iloc[0]['arg_dim_bbox']
+    D = read_D(point, neu, dbbox)
+
+    analyse_frdistance_pertuning(set, point, D)
+    analyse_spatialcorr_pertuning(point, all_pfs, D)
     return point
+
+def alignment(a,b):
+    if a.ndim == 1: return np.sum(a*b)/(np.linalg.norm(a)*np.linalg.norm(b))
+    else: return np.sum(a*b, axis=1)/(np.linalg.norm(a,axis=1)*np.linalg.norm(b,axis=1))
+
+def distance(a,b):
+    return np.abs(a - b)
 
 def analyse_nrooms(set, point):
 
@@ -260,10 +282,7 @@ def analyse_nrooms(set, point):
 
 def analyse_overlap(set, point):
 
-    def overlaplambda(m1, m2, shuffle):
-        if shuffle: m1 = m1[np.random.permutation(m1.shape[0])]
-        return np.sum(m1*m2)/(np.linalg.norm(m1)*np.linalg.norm(m2))
-    
+    # Read meanfr
     dirs = set['arg_env'].shape[0]
     neu = set.iloc[0]['arg_nb_neurons']
     meanfr = np.zeros((neu, dirs))
@@ -272,6 +291,10 @@ def analyse_overlap(set, point):
         meanfr[:,i] = np.array(eval(fr))
         i += 1
 
+    # Only neurons that are active in at least one environment (discard silent)
+    atleast_one = np.any(meanfr,axis=1)
+    meanfr = meanfr[atleast_one,:]
+
     num_pairs = int(dirs*(dirs-1)/2) # Gauss formula
     resultsp = np.zeros(num_pairs)
     resultspshuff = np.zeros(num_pairs)
@@ -279,8 +302,10 @@ def analyse_overlap(set, point):
     for dir_idx in np.arange(dirs):
         for dir_idx2 in np.arange(dir_idx):
             # loop axis are the first ones
-            resultsp[pair_idx] = overlaplambda(meanfr[:,dir_idx], meanfr[:,dir_idx2], shuffle = False)
-            resultspshuff[pair_idx] = overlaplambda(meanfr[:,dir_idx], meanfr[:,dir_idx2], shuffle = True)
+            resultsp[pair_idx] = alignment(meanfr[:,dir_idx], meanfr[:,dir_idx2])
+
+            shuffmeanfr = meanfr[:,dir_idx][np.random.permutation(meanfr.shape[0])]
+            resultspshuff[pair_idx] = alignment(shuffmeanfr, meanfr[:,dir_idx2])
             pair_idx += 1
     
     point['overlap'] = tostore(resultsp)
@@ -292,31 +317,48 @@ def analyse_spatialcorr(point, all_pfs):
     def spatialcorrlambda(m1, m2, shuffle):
         if shuffle: m1 = m1[:, np.random.permutation(m1.shape[1])]
         in_both_active = (m1>0).any(axis=1)*(m2>0).any(axis=1)
-        m1 = m1[in_both_active]
-        m2 = m2[in_both_active]
-        if m1.shape[0] != 0:
-            return np.mean(np.sum(m1*m2, axis=1)/(np.linalg.norm(m1,axis=1)*np.linalg.norm(m2,axis=1)))
-        else: return -1
-
+        if np.any(in_both_active):
+            m1 = m1[in_both_active]
+            m2 = m2[in_both_active]
+            return np.mean(alignment(m1,m2))
+        else: return None
+    
+    # Only environments that have a common active neuron
     dirs = all_pfs.shape[2]
-    num_pairs = int(dirs*(dirs-1)/2) # Gauss formula
-    resultsp = np.zeros(num_pairs)
-    resultspshuff = np.zeros(num_pairs)
-    pair_idx = 0
+    # num_pairs = int(dirs*(dirs-1)/2) # Gauss formula
+    # aneuron_incommon = np.zeros(num_pairs)
+    # i = 0
+    # for dir_idx in np.arange(dirs):
+    #     for dir_idx2 in np.arange(dir_idx):
+    #         aneuron_incommon[i] = np.any((all_pfs[:,:,dir_idx] > 0).any(axis=1)*(all_pfs[:,:,dir_idx2] > 0).any(axis=1))
+    #         i += 1
+
+    # anum_pairs = np.sum(aneuron_incommon)        
+    # resultsp = np.zeros(anum_pairs)
+    # resultspshuff = np.zeros(anum_pairs)
+    # pair_idx = 0
+    # i = 0
+
+    resultsp = np.array([])
+    resultspshuff = np.array([])
     for dir_idx in np.arange(dirs):
         for dir_idx2 in np.arange(dir_idx):
-            # loop axis are the first ones
-            resultsp[pair_idx] = spatialcorrlambda(all_pfs[:,:,dir_idx], all_pfs[:,:,dir_idx2], shuffle = False)
-            resultspshuff[pair_idx] = spatialcorrlambda(all_pfs[:,:,dir_idx], all_pfs[:,:,dir_idx2], shuffle = True)
-            pair_idx += 1
+            res = spatialcorrlambda(all_pfs[:,:,dir_idx], all_pfs[:,:,dir_idx2], shuffle = False)
+            if res is not None:
+                resultsp = np.append(resultsp, res) 
+
+            resshuff = spatialcorrlambda(all_pfs[:,:,dir_idx], all_pfs[:,:,dir_idx2], shuffle = True)
+            if resshuff is not None:
+                resultspshuff = np.append(resultspshuff, resshuff)     
     
     point['spatialcorr'] = tostore(resultsp)
     point['spatialcorrshuff'] = tostore(resultspshuff)
 
 def analyse_multispatialcorr(point, all_pfs):
 
-    def multispatialcorrlambda(m1, m2): return np.sum(m1*m2)/(np.linalg.norm(m1)*np.linalg.norm(m2))
+    # def multispatialcorrlambda(m1, m2): return np.sum(m1*m2)/(np.linalg.norm(m1)*np.linalg.norm(m2))
 
+    # Only neurons that are both active in env 0 and 1
     in_both_active = (all_pfs[:,:,0]>0).any(axis=1)*(all_pfs[:,:,1]>0).any(axis=1)
     all_pfs = all_pfs[in_both_active, :, 0:2]
     neu = np.sum(in_both_active)
@@ -329,8 +371,8 @@ def analyse_multispatialcorr(point, all_pfs):
     for neu_idx in np.arange(neu):
         for neu_idx2 in np.arange(neu_idx):
             # loop axis are the first ones
-            resultsp[pair_idx,0] = multispatialcorrlambda(all_pfs[neu_idx,:,0], all_pfs[neu_idx2,:,0])
-            resultsp[pair_idx,1] = multispatialcorrlambda(all_pfs[neu_idx,:,1], all_pfs[neu_idx2,:,1])
+            resultsp[pair_idx,0] = alignment(all_pfs[neu_idx,:,0], all_pfs[neu_idx2,:,0])
+            resultsp[pair_idx,1] = alignment(all_pfs[neu_idx,:,1], all_pfs[neu_idx2,:,1])
             pair_idx += 1
         resultspshuff[shuff_idx:pair_idx,:] = resultsp[shuff_idx:pair_idx,:]
         np.random.shuffle(resultspshuff[shuff_idx:pair_idx,1])
@@ -338,6 +380,81 @@ def analyse_multispatialcorr(point, all_pfs):
     
     point['multispatialcorr'] = tostore(resultsp)
     point['multispatialcorrshuff'] = tostore(resultspshuff)
+
+def analyse_frdistance_pertuning(set, point, D):
+
+      
+    dirs = set['arg_env'].shape[0]
+    neu = set.iloc[0]['arg_nb_neurons']
+    meanfr = np.zeros((neu, dirs))
+    i = 0
+    for fr in set['meanfr']:
+        meanfr[:,i] = np.array(eval(fr))
+        i += 1
+
+    # Only neurons that are active in at least one environment (discard silent)
+    atleast_one = np.any(meanfr,axis=1)
+    meanfr = meanfr[atleast_one,:]
+
+    atleast_one_idx = np.argwhere(atleast_one)
+    num_atleast_one = np.sum(atleast_one)
+
+    resultsp = np.zeros((num_atleast_one,2))
+    resultspshuff = np.zeros((num_atleast_one,2))
+    num_pairs = int(dirs*(dirs-1)/2)
+    for neu_idx in np.arange(num_atleast_one):
+        distances = np.zeros((num_pairs))
+        i = 0
+        for dir_idx in np.arange(dirs):
+            for dir_idx2 in np.arange(dir_idx):
+                distances[i] = distance(meanfr[neu_idx,dir_idx], meanfr[neu_idx,dir_idx2])
+                i += 1
+        resultsp[neu_idx,1] = np.mean(distances)
+        resultsp[neu_idx,0] = np.linalg.norm(D[:4, atleast_one_idx[neu_idx]])
+    resultspshuff = resultsp.copy()
+    np.random.shuffle(resultspshuff[:,0])
+    
+    point['frdistance_pertuning'] = tostore(resultsp)
+    point['frdistance_pertuningshuff'] = tostore(resultspshuff)
+
+def analyse_spatialcorr_pertuning(point, all_pfs, D):
+
+    def spatialcorr_pertuninglambda(m1):
+        dirs = m1.shape[2]
+        overlaps = np.array([])
+        for dir_idx in np.arange(dirs):
+            for dir_idx2 in np.arange(dir_idx):
+                in_both_active = np.any(m1[0,:,dir_idx])*np.any(m1[0,:,dir_idx2])
+                if in_both_active:
+                    overlaps = np.append(overlaps, alignment(m1[0,:,dir_idx], m1[0,:,dir_idx2])) 
+        return np.mean(overlaps)
+    
+    
+    dirs = all_pfs.shape[2]
+    neu = all_pfs.shape[0]
+    num_pairs = int(dirs*(dirs-1)/2) # Gauss formula
+    neurons_incommon = np.zeros((num_pairs, neu))
+    i = 0
+    for dir_idx in np.arange(dirs):
+        for dir_idx2 in np.arange(dir_idx):
+            neurons_incommon[i,:] = (all_pfs[:,:,dir_idx] > 0).any(axis=1)*(all_pfs[:,:,dir_idx2] > 0).any(axis=1)
+            i += 1
+
+    # Only neurons that are active in at least one pair of environments
+    neurons_atleast = np.argwhere(np.any(neurons_incommon, axis=0))
+    num_neurons_atleast = neurons_atleast.shape[0]
+
+    resultsp = np.zeros((num_neurons_atleast,2))
+    resultspshuff = np.zeros((num_neurons_atleast,2))
+    for neu_idx in np.arange(num_neurons_atleast):
+        resultsp[neu_idx,1] = spatialcorr_pertuninglambda(all_pfs[neurons_atleast[neu_idx],:,:])
+        resultsp[neu_idx,0] = np.linalg.norm(D[:4, neurons_atleast[neu_idx]])
+    resultspshuff = resultsp.copy()
+    np.random.shuffle(resultspshuff[:,0])
+    
+    point['spatialcorr_pertuning'] = tostore(resultsp)
+    point['spatialcorr_pertuningshuff'] = tostore(resultspshuff)
+
 
 ################ RECRUITMENT ANALYSIS #######################
 
@@ -424,9 +541,9 @@ def analyse_coveredarea_perclass(row, point):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='NormalizedMiliTorusPCS2',
+    parser.add_argument("--dir", type=str, default='TestPerTuning',
                         help="Directory to read and write files")
-    parser.add_argument("--compute", type=str, default='placecells',
+    parser.add_argument("--compute", type=str, default='remapping',
                         help = 'Which thing to analyse to make')
     parser.add_argument("--shuffle", action='store_true', default=False,
                         help="Shuffle the data in some way")
