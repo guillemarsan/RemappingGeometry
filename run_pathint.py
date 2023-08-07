@@ -18,18 +18,18 @@ import convexsnn.plot as plot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=2,
+    parser.add_argument("--dim_pcs", type=int, default=1,
                         help="Dimensionality of space")
     parser.add_argument('--path_seed',type=int, default=0,
                         help="Random seed for the path in case of random")
     
-    parser.add_argument("--encoding", type=str, default='flexible',
+    parser.add_argument("--encoding", type=str, default='rotation',
                         help='Determines the type of encoder between rotation, parallel and flexible')
     parser.add_argument("--dim_bbox", type=int, default=8,
                         help="Dimensionality of latent space")
-    parser.add_argument('--env', nargs='+', type=float, default=1,
+    parser.add_argument('--env', type=int, default=2,
                         help="Environment id")
-    parser.add_argument('--embedding_sigma', nargs='+', type=float, default=0.01,
+    parser.add_argument('--embedding_sigma', type=float, default=-1,
                         help="Variance in case of biased embedding (not -1)")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
@@ -37,17 +37,23 @@ if __name__ == "__main__":
                         help="Scale the input by sqrtdbbox") 
     
     
-    parser.add_argument("--nb_neurons", type=int, default=256,
+    parser.add_argument("--nb_neurons", type=int, default=512,
                         help="Number of neurons")
     parser.add_argument("--model", type=str, default='randclosed-load-polyae',
-                        help="Type of model")  
+                        help="Type of model")
+    parser.add_argument("--rnn", action='store_true', default=True,
+                        help="Either rnn or feed-forward")
+    parser.add_argument("--simulate", type=str, default='pathint_one',
+                        help='Determines the type of simulation between integrator (pathint) and one spike (one)')
+    parser.add_argument("--spikeone", action='store_true', default=True,
+                        help="Integrator with only one neurons spiking per timestep")  
     parser.add_argument('--conn_seed',type=int, default=0,
                         help="Random seed for the connectivity in case of random")
     parser.add_argument("--load_id", type=int, default=1,
                         help="Id of the connectivity in case of load") 
-    parser.add_argument("--decoder_amp", type=float, default=0.2,
+    parser.add_argument("--decoder_amp", type=float, default=0.3,
                         help="Amplitude of decoder matrix D")
-    parser.add_argument("--thresh_amp", type=float, default=1.5,
+    parser.add_argument("--thresh_amp", type=float, default=0.6,
                         help="Amplitude of the thresholds")    
     parser.add_argument('--lognor_seed',type=int, default=0,
                         help="The thresholds are taken from a lognormal distribution if not 0") 
@@ -59,18 +65,18 @@ if __name__ == "__main__":
     parser.add_argument("--noise_amp", type=float, default=0.,
                         help="Amplitude of noise")
     
-    parser.add_argument('--current_per', nargs='+',type=float,default=0.5,
+    parser.add_argument('--current_per', type=float,default=0.,
                         help="Percentage of neurons to recieve input current")
-    parser.add_argument('--current_seed', nargs='+',type=float,default=0,
+    parser.add_argument('--current_seed', type=int,default=0,
                         help="Random seed for neurons to recieve input current")
-    parser.add_argument('--current_amp', type=float, default=-100.,
+    parser.add_argument('--current_amp', type=float, default=0,
                         help="Amplitude of the current input")
     
     parser.add_argument("--dir", type=str, default='./out/',
                         help="Directory to dump output")
     parser.add_argument("--compute_fr", action='store_true', default=False,
                         help="Compute rough meanfr for quick check")
-    parser.add_argument("--plot", action='store_true', default=True,
+    parser.add_argument("--plot", action='store_true', default=False,
                         help="Plot the results")
     parser.add_argument("--gif", action='store_true', default=False,
                         help="Generate a gif of the bbox")
@@ -90,17 +96,18 @@ if __name__ == "__main__":
 
     print('Loading model...')
     model, D, G = get_model(dbbox ,n, dbbox,connectivity=args.model, decod_amp=args.decoder_amp, 
-                    thresh_amp=args.thresh_amp, load_id=args.load_id, conn_seed=args.conn_seed, lognor_seed=args.lognor_seed, lognor_sigma=args.lognor_sigma)
+                    thresh_amp=args.thresh_amp, load_id=args.load_id, conn_seed=args.conn_seed, 
+                    lognor_seed=args.lognor_seed, lognor_sigma=args.lognor_sigma, rnn=args.rnn)
 
     # Construction of the path
-    args.path_tmax = 15 #s
+    args.path_tmax = 30 #s
     if args.dim_pcs == 1:
         args.path_type = 'ur'
     else:
         args.path_type = 'usnake'
 
     # Load gamma path
-    print('Loading path')
+    print('Loading path...')
     p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=args.path_type, tmax=args.path_tmax, path_seed=args.path_seed) 
 
     results = dict(datetime=timestr, basepath=basepath, args=vars(args))
@@ -166,9 +173,18 @@ if __name__ == "__main__":
     V0 = model.F @ x0 - G @ x_hat0
 
     decoder = lambda r, i: D @ r - b[:,i] / model.lamb
-    V, s, r, x_hat = model.simulate_pathint_one(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
-    args.integrator = 'pathint'
-    
+    if args.simulate == 'pathint_one':
+        V, s, r, x_hat = model.simulate_pathint_one(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+    elif args.simulate == 'pathint':
+        V, s, r, x_hat = model.simulate_pathint(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+    elif args.simulate == 'one':
+        c = model.lamb*x + dx
+        V, s, r, x_hat = model.simulate_one(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+    else:
+        c = model.lamb*x + dx
+        V, s, r, x_hat = model.simulate(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+
+
     # Decode
     x_hat = bias_corr*x_hat
 
@@ -192,6 +208,9 @@ if __name__ == "__main__":
     results['perpcs'] = npcs/n
     results['pcsidx'] = pcs_list.tolist()
 
+    results['nb_steps'] = time_steps
+    results['dt'] = dt
+
     # FRs
     if args.compute_fr:
         print('Computing firing rates...')
@@ -214,6 +233,8 @@ if __name__ == "__main__":
         
         spike_times = np.argwhere(s)
         np.savetxt("%s-stimes.csv" % basepath, spike_times, fmt='%i')
+        
+        #np.savetxt("%s-D.csv" % basepath, D, fmt='%.3e')
     
     filepath = "%s.json" % basepath
     with open(filepath, "w") as file_handle:
