@@ -4,7 +4,7 @@ import numpy as np
 from convexsnn.ConvexSNN import ConvexSNN
 
 def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, 
-              conn_seed=0, lognor_seed=0, lognor_sigma=0.2):
+              conn_seed=0, lognor_seed=0, lognor_sigma=0.2, rnn=True):
 
     ones = np.ones((out,n))
     D = ones
@@ -138,8 +138,9 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0,
     nD = np.linalg.norm(D, axis=0)
     D = D/nD
     if connectivity != 'custom': 
-        F = D.transpose()
-    G = D.transpose()
+        F = D.T
+
+    G = D.T if rnn else np.zeros_like(D.T)
     T = np.ones(n) * 1/2*(np.linalg.norm(D, axis=0)**2)
     D = D*decod_amp
 
@@ -149,7 +150,7 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0,
     else:
         T = T*thresh_amp
 
-    Om = -G @ D 
+    Om = -G @ D if rnn else -np.eye(n)*decod_amp
 
     model = ConvexSNN(lamb, F, Om, T)
     return model, D, G
