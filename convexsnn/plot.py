@@ -179,6 +179,7 @@ def plot_neuroscience(x, y, V, s, t, basepath, n_vect, T=None):
     ax1.legend(loc='upper right', fontsize=7)
     ax1.set_ylabel('Input x')
     ax1.set_xlabel('Time(s)')
+    ax1.set_xlim([-500,np.max(t_ms)+500])
 
 
     ax2 = plt.subplot(3, 1, 2)
@@ -195,12 +196,14 @@ def plot_neuroscience(x, y, V, s, t, basepath, n_vect, T=None):
     ax2.legend(loc='upper right', fontsize=7)
     ax2.set_ylabel('V(mV)')
     ax2.set_xlabel('t(ms)')
+    ax2.set_xlim([-500,np.max(t_ms)+500])
 
     ax3 = plt.subplot(3, 1, 3)
     for i in range(n_vect.shape[0]):
         ax3.vlines(t_ms[s[n_vect[i],:] == 1], (i+1)*off + i*l, (i+1)*off + (i+1)*l, color=c.to_rgba(i))
     ax3.set_ylabel('Trial 1')
     ax3.set_xlabel('t(ms)')
+    ax3.set_xlim([-500,np.max(t_ms)+500])
 
     filepath = "%s-neurosc.png" % basepath
     plt.savefig(filepath, dpi=600, bbox_inches='tight')

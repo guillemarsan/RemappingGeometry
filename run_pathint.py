@@ -23,7 +23,7 @@ if __name__ == "__main__":
     parser.add_argument('--path_seed',type=int, default=0,
                         help="Random seed for the path in case of random")
     
-    parser.add_argument("--encoding", type=str, default='rotation',
+    parser.add_argument("--encoding", type=str, default='flexible',
                         help='Determines the type of encoder between rotation, parallel and flexible')
     parser.add_argument("--dim_bbox", type=int, default=8,
                         help="Dimensionality of latent space")
@@ -43,17 +43,15 @@ if __name__ == "__main__":
                         help="Type of model")
     parser.add_argument("--rnn", action='store_true', default=True,
                         help="Either rnn or feed-forward")
-    parser.add_argument("--simulate", type=str, default='pathint_one',
+    parser.add_argument("--simulate", type=str, default='one',
                         help='Determines the type of simulation between integrator (pathint) and one spike (one)')
-    parser.add_argument("--spikeone", action='store_true', default=True,
-                        help="Integrator with only one neurons spiking per timestep")  
     parser.add_argument('--conn_seed',type=int, default=0,
                         help="Random seed for the connectivity in case of random")
     parser.add_argument("--load_id", type=int, default=1,
                         help="Id of the connectivity in case of load") 
-    parser.add_argument("--decoder_amp", type=float, default=0.3,
+    parser.add_argument("--decoder_amp", type=float, default=1,
                         help="Amplitude of decoder matrix D")
-    parser.add_argument("--thresh_amp", type=float, default=0.6,
+    parser.add_argument("--thresh_amp", type=float, default=3.5,
                         help="Amplitude of the thresholds")    
     parser.add_argument('--lognor_seed',type=int, default=0,
                         help="The thresholds are taken from a lognormal distribution if not 0") 
@@ -179,10 +177,12 @@ if __name__ == "__main__":
         V, s, r, x_hat = model.simulate_pathint(dx, I, decoder, x0=x0, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
     elif args.simulate == 'one':
         c = model.lamb*x + dx
-        V, s, r, x_hat = model.simulate_one(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+        V, s, r = model.simulate_one(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+        x_hat = D @ r - b / model.lamb
     else:
         c = model.lamb*x + dx
-        V, s, r, x_hat = model.simulate(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+        V, s, r = model.simulate(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
+        x_hat = D @ r - b / model.lamb
 
 
     # Decode
