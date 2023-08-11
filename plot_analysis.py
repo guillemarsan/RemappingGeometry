@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import colors
+from scipy.stats.stats import pearsonr
 import numpy as np
 import time
 
@@ -11,6 +12,17 @@ from convexsnn.plot import plot_scatterplot, plot_violinplot, plot_displot, plot
 
 
 ############# PLOTTING ##########################################
+
+def pearson(x,y,i):
+
+    c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    coeffs = np.polyfit(x,y,1)
+    Rp = pearsonr(x, y)
+    plt.text(0.1, 0.9-0.1*i, "R{} = {:.4f} \n p = {:.4f}".format(i, Rp[0], Rp[1]), transform=plt.gca().transAxes)
+    samples = np.linspace(np.min(x)-0.01,np.max(x)+0.01,100)
+    pyhat = coeffs[1] + coeffs[0]*samples
+    plt.plot(samples,pyhat,color=c[i])
+
 def make_plot(ptype, data, title, axis_labels, basepath, ynormalized=False, equal=False):
 
     plt.figure(figsize=(4,4))
@@ -53,15 +65,21 @@ def make_plot(ptype, data, title, axis_labels, basepath, ynormalized=False, equa
         plt.xticks(np.arange(i-1)+1, conditions)
 
     elif ptype == 'scatter':
+        
+
         for _, point in data.iterrows():
             data = point['data']
             datashuff = point['datashuff']
 
             
-            plt.scatter(data[:,0],data[:,1], alpha=0.7, label='Pairs')
-            plt.scatter(datashuff[:,0], datashuff[:,1], alpha=0.7, label='Shuffle')
+            plt.scatter(data[:,0],data[:,1], alpha=0.7, label=point['legend'])
+            pearson(data[:,0], data[:,1], 0)
+            plt.scatter(datashuff[:,0], datashuff[:,1], alpha=0.7, label='shuffle')
+            pearson(datashuff[:,0], datashuff[:,1], 1)
 
-        plt.xlim(0,1.1)
+
+
+        if ynormalized: plt.xlim(0,1.1)
 
     elif ptype == 'pfs':
 
@@ -242,9 +260,9 @@ def prepare_pfs(df, neurons, visualize, labels):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='TestPerTuning',
+    parser.add_argument("--dir", type=str, default='TestVariance',
                         help="Directory to read and write files")
-    parser.add_argument("--plot", type=str, default='spatialcorr_pertuning',
+    parser.add_argument("--plot", type=str, default='variance_remap',
                         help = 'Which plot to make')
     
 
@@ -263,7 +281,8 @@ if plot in {'placefields'}:
     df = load_dataframe('database', basepath)
 elif plot in {'spatialinfo'}:
     df = load_dataframe('placecells', basepath)
-elif plot in {'nrooms', 'overlap', 'spatialcorr', 'variance_remap', 'multispatialcorr', 'frdistance_pertuning', 'spatialcorr_pertuning'}:
+elif plot in {'nrooms', 'overlap', 'spatialcorr', 'variance_remap', 'multispatialcorr', 
+            'frdistance_pertuning', 'spatialcorr_pertuning', 'nrooms_pertuning'}:
     df = load_dataframe('remapping', basepath)
 else:
     df = load_dataframe('recruitment', basepath)
@@ -277,9 +296,9 @@ if plot == 'placefields':
 
     visualize = ['arg_env', 'arg_encoding']
     labels = ['e', 'enc']
-    params_sweep = [(0,'parallel'), (3,'parallel')]
+    params_sweep = [(0,'flexible'), (1,'flexible'), (2,'flexible'), (3,'flexible'), (4,'flexible'), (5,'flexible')]
     tags = ['pfs']
-    neurons = np.array([161,162,190,203])
+    neurons = np.array([62, 74, 115])
     
     df = filter(df, visualize, params_sweep, tags)
     newdf = prepare_pfs(df, neurons, visualize, labels)
@@ -326,9 +345,9 @@ elif plot == 'nrooms':
 
 elif plot == 'overlap':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_encoding']
-    labels = ['d', 'n', 'l']
-    params_sweep = [(16,512,'rotation'),(16,512,'parallel'),(16,512,'flexible')]
+    visualize = ['arg_encoding', 'arg_embedding_sigma']
+    labels = ['e', 's']
+    params_sweep = [('rotation', 1),('parallel',1),('flexible',1)]
     tags = ['overlap', 'overlapshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -341,9 +360,9 @@ elif plot == 'overlap':
 
 elif plot == 'spatialcorr':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_encoding']
-    labels = ['d', 'n', 'l']
-    params_sweep = [(16,512,'rotation'),(16,512,'parallel'),(16,512,'flexible')]
+    visualize = ['arg_encoding', 'arg_embedding_sigma']
+    labels = ['e', 's']
+    params_sweep = [('rotation', 1),('parallel',1),('flexible',1)]
     tags = ['spatialcorr', 'spatialcorrshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -356,16 +375,16 @@ elif plot == 'spatialcorr':
 
 elif plot == 'variance_remap':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
-    labels = ['d', 'n', 'l']
-    params_sweep = [(8,256,0)]
+    visualize = ['arg_encoding', 'arg_embedding_sigma']
+    labels = ['e', 's']
+    params_sweep = [(e,s) for e in {'flexible'} for s in [0,0.2,0.4,0.6000000000000001,0.8,1]]
     tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff']
 
     df = filter(df, visualize, params_sweep, tags)
 
     # Xaxis variable
-    xaxis = 'arg_load_id'
-    xaxislabel = 'l'
+    xaxis = 'arg_embedding_sigma'
+    xaxislabel = 's'
     visualize.remove(xaxis)
     labels.remove(xaxislabel)
 
@@ -378,9 +397,9 @@ elif plot == 'variance_remap':
 
 elif plot == 'multispatialcorr':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
-    labels = ['d', 'n', 'l']
-    params_sweep = [(16,512,0)]
+    visualize = ['arg_encoding', 'arg_embedding_sigma']
+    labels = ['e', 's']
+    params_sweep = [('flexible',1)]
     tags = ['multispatialcorr', 'multispatialcorrshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -393,9 +412,9 @@ elif plot == 'multispatialcorr':
 
 elif plot == 'frdistance_pertuning':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_encoding']
     labels = ['d', 'n', 'l']
-    params_sweep = [(16,512,0)]
+    params_sweep = [(16,512,0, 'flexible')]
     tags = ['frdistance_pertuning', 'frdistance_pertuningshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -408,9 +427,9 @@ elif plot == 'frdistance_pertuning':
 
 elif plot == 'spatialcorr_pertuning':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id']
-    labels = ['d', 'n', 'l']
-    params_sweep = [(16,512,0)]
+    visualize = ['arg_encoding', 'arg_embedding_sigma']
+    labels = ['e', 's']
+    params_sweep = [('rotation',1)]
     tags = ['spatialcorr_pertuning', 'spatialcorr_pertuningshuff']
 
     df = filter(df, visualize, params_sweep, tags)
@@ -418,6 +437,21 @@ elif plot == 'spatialcorr_pertuning':
     
     title = 'Spatial correlation vs place tuning alignment'
     axis_labels = ['Place tuning alignment', 'Spatial corr.'] 
+    print("Plotting results...")
+    make_plot('scatter', newdf, title, axis_labels, name)
+
+elif plot == 'nrooms_pertuning':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_encoding']
+    labels = ['d', 'n', 'l']
+    params_sweep = [(16,512,0,'flexible')]
+    tags = ['nrooms_pertuning', 'nrooms_pertuningshuff']
+
+    df = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(df, tags,['data','datashuff'], labels, visualize)
+    
+    title = 'Number of rooms vs place tuning alignment'
+    axis_labels = ['Place tuning alignment', 'Number of rooms'] 
     print("Plotting results...")
     make_plot('scatter', newdf, title, axis_labels, name)
 

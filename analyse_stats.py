@@ -256,6 +256,7 @@ def analyse_remapping(set, params):
 
     analyse_frdistance_pertuning(set, point, D)
     analyse_spatialcorr_pertuning(point, all_pfs, D)
+    analyse_nrooms_pertuning(point, all_pfs, D)
     return point
 
 def alignment(a,b):
@@ -455,6 +456,21 @@ def analyse_spatialcorr_pertuning(point, all_pfs, D):
     point['spatialcorr_pertuning'] = tostore(resultsp)
     point['spatialcorr_pertuningshuff'] = tostore(resultspshuff)
 
+def analyse_nrooms_pertuning(point, all_pfs, D):
+
+    neu = all_pfs.shape[0]
+    
+    resultsp = np.zeros((neu,2))
+    resultspshuff = np.zeros((neu,2))
+    for neu_idx in np.arange(neu):
+        resultsp[neu_idx,1] = np.sum(np.any(all_pfs[neu_idx,:,:], axis=0))
+        resultsp[neu_idx,0] = np.linalg.norm(D[:4,neu_idx])
+    resultspshuff = resultsp.copy()
+    np.random.shuffle(resultspshuff[:,0])
+    
+    point['nrooms_pertuning'] = tostore(resultsp)
+    point['nrooms_pertuningshuff'] = tostore(resultspshuff)
+
 
 ################ RECRUITMENT ANALYSIS #######################
 
@@ -541,7 +557,7 @@ def analyse_coveredarea_perclass(row, point):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='TestPerTuning',
+    parser.add_argument("--dir", type=str, default='TestVariance',
                         help="Directory to read and write files")
     parser.add_argument("--compute", type=str, default='remapping',
                         help = 'Which thing to analyse to make')
