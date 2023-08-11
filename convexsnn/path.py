@@ -136,19 +136,23 @@ def get_pathe(p, dim_e, env, flexible=False, variance=-1):
     for i in np.arange(dim_e): 
         if not flexible:
             np.random.seed(70+i)
-            canonic = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
-            canonic = canonic/(2*np.max(np.abs(canonic))) # set it [-0.5,05]
+            # canonic = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
+            # canonic = canonic/(2*np.max(np.abs(canonic))) # set it [-0.5,05]
+            # canonic = np.zeros(points.shape[1]) - 0.9
             np.random.seed(env+i*50)
             if variance == -1:
-                nu = np.random.uniform(-0.4,0.4) # [-0.9, 0.9]
+                nu = np.random.uniform(-1,1) # [-1, 1]
             else:
-                nu = np.random.normal(0, np.max([variance,0.4/2]))
-            eofp = nu + canonic
+                nu = 2
+                while nu > 1 or nu < -1:
+                    nu = np.random.normal(0,variance)
+            # eofp = nu + canonic
+            eofp = np.ones(points.shape[1])*nu
         else:
             np.random.seed(env+i)
             if variance == -1:
                 eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
-                eofp = 0.9* eofp/(np.max(np.abs(eofp))) # [-0.9,0.9]
+                eofp =  eofp/(np.max(np.abs(eofp))) # [-1,1]
             else:
                 eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),variance*covar)
 
