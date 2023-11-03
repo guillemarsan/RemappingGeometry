@@ -29,11 +29,11 @@ def load_dataframe(keyname, basepath):
 
     patt = "*-%s_df.csv" % keyname
     path = pathlib.Path(basepath)
-    results_files = path.rglob(patt)
+    results_files = sorted(path.rglob(patt), reverse=True)
     no_load = False
-    try:
-        file = next(results_files)
-    except StopIteration:
+    if len(results_files) > 0:
+        file = results_files[0]
+    else:
         no_load = True
 
     if no_load:
@@ -101,7 +101,8 @@ def compute_per_simulation(dbase, params, func):
 def compute_across(dbase, across, params, func):
 
     groupby_pars = params
-    groupby_pars.remove(across)
+    for a in across:
+        groupby_pars.remove(a)
 
     gb = dbase.groupby(groupby_pars, as_index=False)
     df = gb.apply(lambda x: func(x, groupby_pars))
@@ -143,53 +144,76 @@ def analyse_ratemaps_pfs(point):
     ratemaps = np.zeros((neu,b))
     placefields = np.zeros((neu,b))
     meanfr = np.zeros(neu)
+    pfsize = np.zeros(neu)
+    spikes = np.zeros(neu)
     for i in np.arange(neu):
         ratemaps[i,:] = compute_ratemap(s[i,:], pathloc, tb)
         placefields[i,:] = compute_pf(ratemaps[i,:], bins)
         meanfr[i] = np.sum(occupancies*placefields[i,:])
+        pfsize[i] = bin_size*np.sum(placefields[i,:] > 0)
+        spikes[i] = np.sum(s[i,:])
+
+    pcsidx = np.where(meanfr > 0)[0]
+    perpcs = pcsidx.shape[0]/neu
+
+    point['spikes'] = tostore(spikes)
+    point['meanfr'] = tostore(meanfr)
+    point['pfsize'] = tostore(pfsize)
+    point['occupancies'] = tostore(occupancies)
+    point['pcsidx'] = tostore(pcsidx)
+    point['perpcs'] = perpcs
 
     ratemaps_name = "{0}-ratemaps.csv".format(id)
     pfs_name = "{0}-pfs.csv".format(id)
-
     np.savetxt(ratemaps_name, ratemaps, fmt='%.3e')
     np.savetxt(pfs_name, placefields, fmt='%.3e')
-
-    point['meanfr'] = tostore(meanfr)
-    point['occupancies'] = tostore(occupancies)
     point['ratemaps'] = ratemaps_name
     point['pfs'] = pfs_name
+
+    
+    
 
     return point
 
 def analyse_classes(set):
 
     neu = set.iloc[0]['arg_nb_neurons']
-    set.sort_values(by=['arg_current_amp'])
-    inhibis_vect = set['arg_current_amp']
     
-    classes = np.ones(neu)*3
-    original = set.iloc[0]
+    # [TagPermanent, TagMuted, | nTagPermanent, nTagMuted, | SilentPermanent, SilentRecruited]
+    classes = np.zeros(neu) 
+    original = set[(set['arg_tagging_sparse']==0)].iloc[0]
+
     active = np.array(eval(original['pcsidx']))
-    # TODO the tagged
-    # tagged = np.array(eval(original['taggedidx']))
-    tagged = np.arange(20)*2
+    silent = np.setdiff1d(np.arange(neu),active)
+
     classes[active] = 0
-    classes[tagged] = 1
+    classes[silent] = 4
 
-    set['classes'] = tostore(classes)
+    set.at[0,'classes'] = tostore(classes)
 
-    i = 1
-    for inhib in inhibis_vect[1:]:
+    for i in np.arange(1,len(set)):
         
-        casenow = set['arg_current_amp' == inhib]
+        casenow = set.iloc[i]
+        tagged = np.array(eval(casenow['arg_tagged_idx']),dtype=int)
+        ntagged = np.setdiff1d(active, tagged)
         activenow = np.array(eval(casenow['pcsidx']))
+        silentnow = np.setdiff1d(np.arange(neu),activenow)
 
-        recruited = np.setdiff1d(activenow, active)
+        tagPerm = np.intersect1d(activenow, tagged)
+        tagMuted = np.intersect1d(silentnow, tagged)
+        ntagPerm = np.intersect1d(activenow, ntagged)
+        ntagMuted = np.intersect1d(silentnow, ntagged)
+        sPerm = np.intersect1d(silentnow, silent)
+        sRecruited = np.intersect1d(activenow, silent)
 
-        classes[recruited] = 2
+        classes[tagPerm] = 0
+        classes[tagMuted] = 1
+        classes[ntagPerm] = 2
+        classes[ntagMuted] = 3
+        classes[sPerm] = 4
+        classes[sRecruited] = 5
 
-        casenow['classes'] = tostore(classes)
-        i += 1
+        set.at[i,'classes'] = tostore(classes)
 
     return set
 
@@ -358,6 +382,8 @@ def analyse_spatialcorr(point, all_pfs):
 def analyse_multispatialcorr(point, all_pfs):
 
     # def multispatialcorrlambda(m1, m2): return np.sum(m1*m2)/(np.linalg.norm(m1)*np.linalg.norm(m2))
+    
+    # TODO Check that the first pair of environments have at least two active place cells in common
 
     # Only neurons that are both active in env 0 and 1
     in_both_active = (all_pfs[:,:,0]>0).any(axis=1)*(all_pfs[:,:,1]>0).any(axis=1)
@@ -479,15 +505,19 @@ def analyse_recruitment(row, params):
     point = row[params]
     point['classes'] = row['classes']
     analyse_perpcs_perclass(point)
-    analyse_fr_perclass(row, point)
     
-    # TODO Change this to spatial error
-    point['decoding_error'] = [row['tracking_error']]
-    point['meanfr'] = row['meanfr']
-    point['maxfr'] = row['maxfr']
+    # TODO Change this to spatial error?
+    point['g_error'] = [row['g_error']]
 
-    analyse_pfsize(row, point)
-    analyse_pfsize_perclass(point)
+    analyse_pcsmfr(row, point)
+    analyse_mfr_perclass(row, point)
+
+    analyse_pcspfsize(row, point)
+    analyse_pfsize_perclass(row, point)
+
+    point['spikes'] = [np.sum(np.array(eval(row['spikes'])))]
+    analyse_spikes_perclass(row, point)
+
     analyse_coveredarea_perclass(row, point)
     
     return point
@@ -497,46 +527,51 @@ def analyse_perpcs_perclass(point):
     neu = point['arg_nb_neurons']
     classes = np.array(eval(point['classes']))
 
-    labels = ['permanent', 'tagged', 'recruited', 'silent']
-    for c in np.arange(4):
+    labels = ['tP', 'tM', 'ntP', 'ntM', 'sP', 'sR']
+    for c in np.arange(6):
         point['perpcs_' + labels[c]] = tostore(np.array([np.sum(classes == c)/neu]))
     
-def analyse_fr_perclass(row, point):
+def analyse_mfr_perclass(row, point):
     
-    meanfridx = np.array(eval(row['meanfr']))
-    maxfridx = np.array(eval(row['maxfr']))
+    meanfr = np.array(eval(row['meanfr']))
     classes = np.array(eval(row['classes']))
-    pcsidx = np.array(eval(row['pcsidx']))
-    neu = row['arg_nb_neurons']
-
-    meanfr = np.zeros(neu)
-    maxfr = np.zeros(neu)
-    meanfr[pcsidx] = meanfridx
-    maxfr[pcsidx] = maxfridx
     
-    labels = ['permanent', 'tagged', 'recruited', 'silent']
-    for c in np.arange(4):
+    labels = ['tP', 'tM', 'ntP', 'ntM', 'sP', 'sR']
+    for c in np.arange(6):
         point['meanfr_' + labels[c]] = tostore(meanfr[classes == c] if np.any(classes == c) else np.array([0]))
-        point['maxfr_' + labels[c]]= tostore(maxfr[classes == c] if np.any(classes == c) else np.array([0]))
 
-def analyse_pfsize(row, point):
+def analyse_pcsmfr(row, point):
 
-    with open(row['pfs']) as res_file:
-        t0 = time.time()
-        pfs = np.genfromtxt(res_file)
-        t1 = time.time()
-        print(t1-t0)
+    pcsidx = np.array(eval(row['pcsidx']))
+    meanfr = np.array(eval(row['meanfr']))
 
-    point['pfsize'] = tostore(np.sum(pfs > 0, axis=1)*bin_size)
+    point['pcsmeanfr'] = tostore(meanfr[pcsidx])
 
-def analyse_pfsize_perclass(point):
+def analyse_pcspfsize(row, point):
 
-    classes = np.array(eval(point['classes']))
-    pfsize = np.array(eval(point['pfsize']))
+    pcsidx = np.array(eval(row['pcsidx']))
+    pfsize = np.array(eval(row['pfsize']))
     
-    labels = ['permanent', 'tagged', 'recruited', 'silent']
-    for c in np.arange(4):
+    point['pcspfsize'] = tostore(pfsize[pcsidx])
+
+
+def analyse_pfsize_perclass(row, point):
+
+    classes = np.array(eval(row['classes']))
+    pfsize = np.array(eval(row['pfsize']))
+    
+    labels = ['tP', 'tM', 'ntP', 'ntM', 'sP', 'sR']
+    for c in np.arange(6):
         point['pfsize_' + labels[c]] = tostore(pfsize[classes == c] if np.any(classes == c) else np.array([0]))
+
+def analyse_spikes_perclass(row, point):
+
+    classes = np.array(eval(row['classes']))
+    spikes = np.array(eval(row['spikes']))
+    
+    labels = ['tP', 'tM', 'ntP', 'ntM', 'sP', 'sR']
+    for c in np.arange(6):
+        point['spikes_' + labels[c]] = [np.sum(spikes[classes == c])] if np.any(classes == c) else [0]
 
 def analyse_coveredarea_perclass(row, point):
 
@@ -546,20 +581,20 @@ def analyse_coveredarea_perclass(row, point):
         t1 = time.time()
         print(t1-t0)
 
-    point['coveredarea'] = tostore(np.array([np.sum(np.sum(pfs, axis=0) > 0)/b]))
-    classes = np.array(eval(point['classes']))
+    point['coveredarea'] = [np.sum(np.sum(pfs, axis=0) > 0)/b]
 
-    labels = ['permanent', 'tagged', 'recruited', 'silent']
-    for c in np.arange(4):
-        point['coveredarea_' + labels[c]] = tostore(np.array([np.sum(np.sum(pfs[classes == c,:], axis=0) > 0)/b]))
+    classes = np.array(eval(row['classes']))
 
+    labels = ['tP', 'tM', 'ntP', 'ntM', 'sP', 'sR']
+    for c in np.arange(6):
+        point['coveredarea_' + labels[c]] = [np.sum(np.sum(pfs[classes == c,:], axis=0) > 0)/b]
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='TestVariance',
+    parser.add_argument("--dir", type=str, default='TestRecruitmentTotal',
                         help="Directory to read and write files")
-    parser.add_argument("--compute", type=str, default='remapping',
+    parser.add_argument("--compute", type=str, default='classes',
                         help = 'Which thing to analyse to make')
     parser.add_argument("--shuffle", action='store_true', default=False,
                         help="Shuffle the data in some way")
@@ -579,6 +614,7 @@ else:
 if compute == 'database':
     df = compute_database(basepath)
 else:
+    # TODO read youngest database
     dbase = load_dataframe('database', basepath)
     cols = list(dbase.columns)
     params = [c for c in cols if c.startswith('arg_')]
@@ -589,7 +625,7 @@ if compute == 'ratemaps_pfs':
     df = compute_per_simulation(dbase, params, lambdafunc)
 elif compute == 'classes':
     lambdafunc = lambda x, gb: analyse_classes(x)
-    df = compute_across(dbase, 'arg_current_amp', params, lambdafunc)  
+    df = compute_across(dbase, ['arg_tagging_sparse','arg_current_amp','arg_tagged_idx'], params, lambdafunc)  
 
 # Making a new database
 elif compute == 'placecells':
