@@ -63,10 +63,10 @@ if __name__ == "__main__":
     parser.add_argument("--noise_amp", type=float, default=0.,
                         help="Amplitude of noise")
     
-    parser.add_argument('--current_per', type=float,default=0.,
-                        help="Percentage of neurons to recieve input current")
-    parser.add_argument('--current_seed', type=int,default=0,
-                        help="Random seed for neurons to recieve input current")
+    parser.add_argument('--tagging_sparse', type=float,default=0.,
+                        help="Probability of neurons to express opsin")
+    parser.add_argument('--tagged_idx', nargs='+', type=int, default=[],
+                        help="Neurons already tagged for inhibition")
     parser.add_argument('--current_amp', type=float, default=0,
                         help="Amplitude of the current input")
     
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     I, b = get_noise(dbbox, t, G, noise_amp=args.noise_amp, noise_seed=args.noise_seed)
     
     # Current manipulation
-    I += get_current(n, t, current_per=args.current_per, current_amp=args.current_amp, current_seed=args.current_seed)
+    I += get_current(n, t, tagged_idx=args.tagged_idx, current_amp=args.current_amp)
 
     # Bias correction for D
     input_amp = np.sqrt(dbbox)*args.input_amp if args.input_scale else args.input_amp
@@ -205,8 +205,8 @@ if __name__ == "__main__":
     active_list = np.any(s,axis=1)
     pcs_list = np.where(active_list)[0]
     npcs = pcs_list.shape[0]
-    results['perpcs'] = npcs/n
-    results['pcsidx'] = pcs_list.tolist()
+    results['peractive'] = npcs/n
+    results['activeidx'] = pcs_list.tolist()
 
     results['nb_steps'] = time_steps
     results['dt'] = dt
