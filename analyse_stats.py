@@ -1,6 +1,6 @@
 from operator import ne
 import pathlib, argparse, json, time
-from utils import compute_meshgrid, compute_ratemap, compute_pf, compute_pathloc
+from utils import compute_meshgrid, compute_ratemap_s, compute_ratemap_r, compute_pf, compute_pathloc
 import numpy as np
 import time
 import pandas as pd
@@ -114,6 +114,65 @@ def compute_across(dbase, across, params, func):
 ########## ADD TO MAIN DATABASE #############
 
 def analyse_ratemaps_pfs(point):
+    spikes = point['arg_simulate'] != 'minimization'
+    if spikes: return analyse_ratemaps_pfs_s(point)
+    else: return analyse_pfs_r(point)
+
+def analyse_pfs_r(point):
+    id = point['basepath']
+    rates_name = "{0}-rates.csv".format(id)
+    with open(rates_name) as res_file:
+        t0 = time.time()
+        rates = np.genfromtxt(res_file)
+        t1 = time.time()
+        print(t1-t0)
+
+    path_tmax = point['arg_path_tmax']
+    path_type = point['arg_path_type']
+    path_seed = point['arg_path_seed']
+
+    p, dp, t, dt, time_steps = get_path(dpcs=2, type=path_type, tmax=path_tmax, path_seed=path_seed)
+    bins = compute_meshgrid(radius,b)
+    neu = point['arg_nb_neurons']
+
+    # Compute occupancies    
+    pathloc = compute_pathloc(p, bins)
+    tb = np.sum(pathloc, axis=1)*dt
+    occupancies = tb/np.max(t)
+
+    ratemaps = np.zeros((neu,b))
+    placefields = np.zeros((neu,b))
+    meanfr = np.zeros(neu)
+    pfsize = np.zeros(neu)
+    # spikes = np.zeros(neu)
+    for i in np.arange(neu):
+        ratemaps[i,:] = compute_ratemap_r(rates[i,:], pathloc)
+        placefields[i,:] = ratemaps[i,:].copy()
+        placefields[i, placefields[i,:] < 1e-3] = 0 # for analysis
+        meanfr[i] = np.mean(placefields[i,:])
+        pfsize[i] = bin_size*np.sum(placefields[i,:] > 0)
+        # spikes[i] = np.sum(s[i,:])
+
+    pcsidx = np.where(meanfr > 0)[0]
+    perpcs = pcsidx.shape[0]/neu
+
+    # point['spikes'] = tostore(spikes)
+    point['meanfr'] = tostore(meanfr)
+    point['pfsize'] = tostore(pfsize)
+    point['occupancies'] = tostore(occupancies)
+    point['pcsidx'] = tostore(pcsidx)
+    point['perpcs'] = perpcs
+
+    ratemaps_name = "{0}-ratemaps.csv".format(id)
+    pfs_name = "{0}-pfs.csv".format(id)
+    np.savetxt(ratemaps_name, ratemaps, fmt='%.3e')
+    np.savetxt(pfs_name, placefields, fmt='%.3e')
+    point['ratemaps'] = ratemaps_name
+    point['pfs'] = pfs_name
+
+    return point
+
+def analyse_ratemaps_pfs_s(point):
 
     id = point['basepath']
     stimes_name = "{0}-stimes.csv".format(id)
@@ -147,7 +206,7 @@ def analyse_ratemaps_pfs(point):
     pfsize = np.zeros(neu)
     spikes = np.zeros(neu)
     for i in np.arange(neu):
-        ratemaps[i,:] = compute_ratemap(s[i,:], pathloc, tb)
+        ratemaps[i,:] = compute_ratemap_s(s[i,:], pathloc, tb)
         placefields[i,:] = compute_pf(ratemaps[i,:], bins)
         meanfr[i] = np.sum(occupancies*placefields[i,:])
         pfsize[i] = bin_size*np.sum(placefields[i,:] > 0)
@@ -247,11 +306,11 @@ def analyse_spatialinfo(row, point):
     results_spatialinfo = np.sum(info_bin, axis=0)
 
     # Histogram 
-    info_bins = np.arange(0+1e-5,np.max(results_spatialinfo),9)
+    info_bins = np.linspace(0+1e-5,np.max(results_spatialinfo),10)
     info_bins = np.insert(info_bins,0,0)
     
-    active_neurons = np.where(np.sum(pfs,axis=1))[0]
-    hist = np.apply_along_axis(lambda a: np.histogram(a, bins=info_bins), 0, results_spatialinfo[active_neurons])[0]
+    active_neurons = np.array(eval(row['pcsidx']))
+    hist = np.histogram(results_spatialinfo[active_neurons], bins=info_bins)[0]
 
     point['spatialinfo'] = tostore(hist)
     point['spatialinfo_bins'] = tostore(np.array(info_bins))
@@ -592,9 +651,9 @@ def analyse_coveredarea_perclass(row, point):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='TestRecruitmentTotal',
+    parser.add_argument("--dir", type=str, default='MinTestGrid',
                         help="Directory to read and write files")
-    parser.add_argument("--compute", type=str, default='classes',
+    parser.add_argument("--compute", type=str, default='ratemaps_pfs',
                         help = 'Which thing to analyse to make')
     parser.add_argument("--shuffle", action='store_true', default=False,
                         help="Shuffle the data in some way")
@@ -614,7 +673,6 @@ else:
 if compute == 'database':
     df = compute_database(basepath)
 else:
-    # TODO read youngest database
     dbase = load_dataframe('database', basepath)
     cols = list(dbase.columns)
     params = [c for c in cols if c.startswith('arg_')]
@@ -633,7 +691,7 @@ elif compute == 'placecells':
     df = compute_per_simulation(dbase, params, lambdafunc)
 elif compute == 'remapping':
     lambdafunc = lambda x, gb: analyse_remapping(x,gb)
-    df = compute_across(dbase, 'arg_env', params, lambdafunc)
+    df = compute_across(dbase, ['arg_env'], params, lambdafunc)
 elif compute == 'recruitment':
     lambdafunc = lambda x, params: analyse_recruitment(x, params)
     df = compute_per_simulation(dbase, params, lambdafunc)

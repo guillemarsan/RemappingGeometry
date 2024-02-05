@@ -3,7 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.animation as animation
-from utils import compute_meshgrid, compute_pathloc, compute_ratemap, compute_pf
+from utils import compute_meshgrid, compute_pathloc, compute_ratemap_s, compute_pf
 from mpl_toolkits.mplot3d import Axes3D as plt3d
 from scipy.stats.stats import pearsonr
 
@@ -446,7 +446,7 @@ def plot_2dspikebins(p, s, dt, b, basepath, n_vect):
        
         pathloc = compute_pathloc(p, bins)
         tb = np.sum(pathloc, axis=1)*dt
-        ratemap = compute_ratemap(s[n_vect[i]], pathloc, tb)
+        ratemap = compute_ratemap_s(s[n_vect[i]], pathloc, tb)
         sums = compute_pf(ratemap, bins)
         maxfr = np.max(sums)
     
