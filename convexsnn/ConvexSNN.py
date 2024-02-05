@@ -1,4 +1,6 @@
 import numpy as np
+import cvxpy as cp
+from utils import check_code_encode
 
 class ConvexSNN():
     def __init__(self, lamb, F, Om, T):
@@ -99,6 +101,34 @@ class ConvexSNN():
             #     rtp[w] = rtp[w] + 1 
             #     C = np.sum(Vtp > self.T)
 
+    def simulate_minimization(self, x):
+        
+        np.random.seed(0)
+        xp = cp.Parameter(x.shape[0])
+        r = cp.Variable(self.n)
+        objective = cp.Minimize(cp.sum_squares(xp - self.F.T @ r) + 2*r.T @ self.T)
+        constraints = [r >= 0]
+        prob = cp.Problem(objective, constraints)
+
+        rt = []
+        for xval in x.T:
+            xp.value = xval
+            l = prob.solve(solver=cp.ECOS) #feastol
+            rt.append(r.value)
+        rt = np.vstack(rt).T
+        print(np.min(rt))
+        rt[rt < 0] = 0 #non feasible results
+        # check_code_encode(x, rt, self.F.T, self.T)
+        return rt
+
+        # Batch attempt: not converging
+        # np.random.seed(0)
+        # r = cp.Variable((self.n, x.shape[1]))
+        # objective = cp.Minimize(cp.sum(cp.sum_squares(x - self.F.T @ r) + r.T @ self.T))
+        # constraints = [r >= 0]
+        # prob = cp.Problem(objective, constraints)
+        # l = prob.solve(solver=cp.SCS, eps=1e-8, verbose=True) #ECOS, feastol
+        # return r
 
     def simulate_adaptive(self, c, I, V0=0, r0=0, dt=0.001, time_steps=100, a=5):
         V = np.zeros((self.n,time_steps))
