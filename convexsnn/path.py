@@ -2,11 +2,13 @@ import scipy
 import scipy.signal, scipy.ndimage
 import numpy as np
 import time
+from utils import compute_meshgrid
 
-dt = 0.0001
+
 
 def get_path(dpcs, type, tmax, path_seed=0):
     
+    dt = 0.0001
     time_steps = int(tmax * 1/dt)
     t = np.arange(time_steps)*dt
 
@@ -98,9 +100,18 @@ def get_path(dpcs, type, tmax, path_seed=0):
                     p[d,ts+1] = -1
                     dp[d,ts+1] = 0
         print(np.max(dp))    
+
+    elif type == 'grid':
+        npoints = 200 if dpcs == 1 else 400
+        p = compute_meshgrid(1, npoints, dpcs)
+        dp = np.zeros_like(p)
+        dt = 1
+        time_steps = npoints
+        t = np.arange(time_steps)*dt
+
     return p, dp, t, dt, time_steps
 
-def get_pathe(p, dim_e, env, flexible=False, variance=-1):
+def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
 
     def gram(x):
         sigma = 0.75
