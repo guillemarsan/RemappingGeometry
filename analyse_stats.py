@@ -131,12 +131,13 @@ def analyse_pfs_r(point):
     path_type = point['arg_path_type']
     path_seed = point['arg_path_seed']
 
-    p, dp, t, dt, time_steps = get_path(dpcs=2, type=path_type, tmax=path_tmax, path_seed=path_seed)
-    bins = compute_meshgrid(radius,b)
+    dpcs = point['arg_dim_pcs']
+    p, dp, t, dt, time_steps = get_path(dpcs=dpcs, type=path_type, tmax=path_tmax, path_seed=path_seed)
+    bins = compute_meshgrid(radius,b,dpcs)
     neu = point['arg_nb_neurons']
 
     # Compute occupancies    
-    pathloc = compute_pathloc(p, bins)
+    pathloc = compute_pathloc(p, bins, dpcs)
     tb = np.sum(pathloc, axis=1)*dt
     occupancies = tb/np.max(t)
 
@@ -191,12 +192,13 @@ def analyse_ratemaps_pfs_s(point):
     path_type = point['arg_path_type']
     path_seed = point['arg_path_seed']
 
-    p, dp, t, dt, time_steps = get_path(dpcs=2, type=path_type, tmax=path_tmax, path_seed=path_seed)
-    bins = compute_meshgrid(radius,b)
+    dpcs = point['arg_dpcs']
+    p, dp, t, dt, time_steps = get_path(dpcs=dpcs, type=path_type, tmax=path_tmax, path_seed=path_seed)
+    bins = compute_meshgrid(radius,b,dpcs)
     neu = point['arg_nb_neurons']
 
     # Compute occupancies    
-    pathloc = compute_pathloc(p, bins)
+    pathloc = compute_pathloc(p, bins, dpcs)
     tb = np.sum(pathloc, axis=1)*dt
     occupancies = tb/np.max(t)
 
@@ -653,7 +655,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Simulation of one point")
     parser.add_argument("--dir", type=str, default='MinTestGrid',
                         help="Directory to read and write files")
-    parser.add_argument("--compute", type=str, default='ratemaps_pfs',
+    parser.add_argument("--compute", type=str, default='remapping',
                         help = 'Which thing to analyse to make')
     parser.add_argument("--shuffle", action='store_true', default=False,
                         help="Shuffle the data in some way")

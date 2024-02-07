@@ -13,15 +13,20 @@ def compute_meshgrid(radius, num_bins, dim=2):
 
     return ppts
 
-def compute_pathloc(path, bins):
+def compute_pathloc(path, bins, dim=2):
     num_bins = bins.shape[1]
     time_steps = path.shape[1]
     step = np.abs(np.sum(bins[:,0]-bins[:,1])/2)
     pathloc = np.zeros((num_bins,time_steps))
 
-    origin = np.array([-1,1])[:,np.newaxis]
-    idcs = (np.abs(path - origin) // (2*step)).astype(int)
-    j = idcs[0,:] + int(np.sqrt(num_bins))*idcs[1,:]
+    if dim == 2:
+        origin = np.array([-1,1])[:,np.newaxis]
+        idcs = (np.abs(path - origin) // (2*step)).astype(int)
+        j = idcs[0,:] + int(np.sqrt(num_bins))*idcs[1,:]
+    else:
+        origin = np.array([-1])[:,np.newaxis]
+        idcs = (np.abs(path - origin) // (2*step)).astype(int)
+        j = idcs[0,:]
     pathloc[j,np.arange(time_steps)] = 1
 
     return pathloc.astype(int)
