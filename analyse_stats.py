@@ -45,11 +45,12 @@ def load_dataframe(keyname, basepath):
 
     return df
 
-def read_pfs(set, neu, b, dirs):
+def read_pfs(set, neu, b, dirs, ratemaps=False):
 
     all_pfs = np.zeros((neu, b, dirs))
     i = 0
-    for file in set['pfs']:
+    filelist = set['pfs'] if not ratemaps else set['ratemaps']
+    for file in filelist:
         with open(file) as res_file:
             t0 = time.time()
             pfs = np.genfromtxt(res_file)
@@ -326,18 +327,24 @@ def analyse_spatialinfo(row, point):
 def analyse_remapping(set, params):
 
     point = set.iloc[0][params]
+    neu = set.iloc[0]['arg_nb_neurons']
+    dirs = len(set)
+
+    dbbox = set.iloc[0]['arg_dim_bbox']
+    D = read_D(point, neu, dbbox)
+    all_ratemaps = read_pfs(set, neu, b, dirs, ratemaps=True)
+
+    if point['arg_dim_pcs'] == 1:
+        analyse_pca(point, all_ratemaps, D)
+    
+    analyse_remapping_vector(point, all_ratemaps, D)
     analyse_nrooms(set, point)
     analyse_overlap(set, point)
     
-    neu = set.iloc[0]['arg_nb_neurons']
-    dirs = len(set)
     all_pfs = read_pfs(set, neu, b, dirs)
 
     analyse_spatialcorr(point, all_pfs)
     analyse_multispatialcorr(point, all_pfs)
-
-    dbbox = set.iloc[0]['arg_dim_bbox']
-    D = read_D(point, neu, dbbox)
 
     analyse_frdistance_pertuning(set, point, D)
     analyse_spatialcorr_pertuning(point, all_pfs, D)
@@ -350,6 +357,65 @@ def alignment(a,b):
 
 def distance(a,b):
     return np.abs(a - b)
+
+def analyse_pca(point, all_ratemaps, D):
+
+    def pca(x):
+        centered = x - np.mean(x,axis=0)
+        cov = np.cov(centered, rowvar=False)
+        lmb, v = np.linalg.eigh(cov)
+        idx = np.argsort(lmb)[::-1]
+        v = v[:, idx]
+        varexp = lmb[idx]/np.sum(lmb)
+        return varexp, v
+
+    envs = all_ratemaps.shape[2]
+    time_steps = all_ratemaps.shape[1]
+
+    flatten_r = np.hstack([all_ratemaps[:,:,i] for i in np.arange(envs)]).T
+
+    varexp_r, v_r = pca(flatten_r) 
+    aux = np.dot(flatten_r, v_r[:,:3])
+
+    pca_proj_r = np.zeros((3,time_steps,envs))
+    for i in np.arange(envs):
+        pca_proj_r[:,:,i] = aux[i*time_steps:(i+1)*time_steps,:].T
+
+    y = (all_ratemaps.T @ D.T).T # D @ all_ratemaps
+    
+    point['var_explained_r'] = tostore(varexp_r)
+    point['pca_proj_r'] = tostore(pca_proj_r)
+    point['y_trajs'] = tostore(y)
+
+def analyse_remapping_vector(point, all_ratemaps, D):
+
+    dirs = all_ratemaps.shape[2]
+    es = point['arg_encoding'] in {'flexible', 'parallel'}
+    if es: edims = point['arg_dim_pcs']*2
+    DR = np.linalg.pinv(D)
+
+    num_pairs = int(dirs*(dirs-1)/2) # Gauss formula
+    norm_remap = np.zeros(num_pairs)
+    norm_Dy = np.zeros(num_pairs)
+    norm_Dye = np.zeros(num_pairs)
+    norm_nu = np.zeros(num_pairs)
+    pair_idx = 0
+    for dir_idx in np.arange(dirs):
+        for dir_idx2 in np.arange(dir_idx):
+            # loop axis are the first ones
+            remap_vec = all_ratemaps[:,:,dir_idx] - all_ratemaps[:,:,dir_idx2]
+            norm_remap[pair_idx] = np.linalg.norm(remap_vec)
+            dy = D @ remap_vec
+            norm_Dy[pair_idx] = np.linalg.norm(DR @ dy) if not es else np.linalg.norm(DR[:,:edims] @ dy[:edims,:])
+            if es: norm_Dye[pair_idx] = np.linalg.norm(DR[:,edims:] @ dy[edims:,:])
+            dnu = remap_vec - DR @ dy
+            norm_nu[pair_idx] = np.linalg.norm(dnu)
+            pair_idx += 1
+
+    point['norm_remap'] = tostore(norm_remap)
+    point['norm_Dy'] = tostore(norm_Dy)
+    point['norm_Dye'] = tostore(norm_Dye)
+    point['norm_nu'] = tostore(norm_nu)
 
 def analyse_nrooms(set, point):
 
@@ -653,7 +719,7 @@ def analyse_coveredarea_perclass(row, point):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='MinTestGrid',
+    parser.add_argument("--dir", type=str, default='PCATest2',
                         help="Directory to read and write files")
     parser.add_argument("--compute", type=str, default='remapping',
                         help = 'Which thing to analyse to make')

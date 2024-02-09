@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import colors
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.stats.stats import pearsonr
 import numpy as np
 import time
@@ -177,7 +178,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
                 sqrtb = int(np.sqrt(pfs.shape[1]))
                 pf = pf.reshape((sqrtb,sqrtb))
                 alphas = pf/np.max(pf) if np.max(pf) > 0 else 0
-                im = axsub.imshow(pf, alpha=alphas, cmap=cmap, norm=norm)
+                im = axsub.imshow(pf, alpha=alphas, cmap=cmap, norm=norm, extent=[-1,1,-1,1])
                 if np.max(pf)>0:
                     axsub.text(0.7, -ti*0.15, '{:.2f}Hz'.format(np.max(pf)), wrap=True, transform=axsub.transAxes, color=c_sat, horizontalalignment='center', fontsize=4)
                     ti += 1
@@ -188,7 +189,54 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
         else:
             patches = [matplotlib.patches.Patch(color=c[colorgroups[i]], label='N%i' % n) for i,n in enumerate(neurons) ]
         plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. , prop={'size': 6})
-    if ptype != 'pfs':
+
+    elif ptype == 'pca':
+
+        plt.figure(figsize=(10,10))
+        point = data.iloc[0]
+        var_r = point['var_r']
+        proj_r = point['proj_r']
+        y = point['y_trajs']
+
+        ax1 = plt.subplot(2, 2, 1, projection='3d')
+        for e in np.arange(proj_r.shape[2]):
+            ax1.scatter(proj_r[0,:,e], proj_r[1,:,e], proj_r[2,:,e])
+        ax1.set_title('PCA of r')
+
+        ax2 = plt.subplot(2, 2, 2)
+        ax2.plot(np.arange(var_r.shape[0]), var_r)
+        ax2.set_title('Var. explained %')
+        ax2.set_xlabel('PC')
+
+        if y.shape[0] == 3:
+            ax3 = plt.subplot(2, 1, 2, projection='3d')
+            for e in np.arange(proj_r.shape[2]):
+                ax3.scatter(y[0,:,e], y[1,:,e], y[2,:,e])
+            ax3.set_title('Embedding space y')
+            ax3.set_xlim([-1,1])
+            ax3.set_ylim([-1,1])
+            ax3.set_zlim([-1,1])
+            ax3.set_box_aspect([np.ptp(axis) for axis in [ax3.get_xlim(), ax3.get_ylim(), ax3.get_zlim()]])
+            
+        else:
+            ax3 = plt.subplot(2, 2, 3)
+            for e in np.arange(proj_r.shape[2]):
+                ax3.scatter(y[0,:,e], y[1,:,e])
+            ax3.set_xlim([-1,1])
+            ax3.set_ylim([-0.1,1])
+            ax3.axis('equal')
+            ax3.set_title('y(0),y(1)')
+
+            ax4 = plt.subplot(2, 2, 4)
+            for e in np.arange(proj_r.shape[2]):
+                ax4.scatter(y[2,:,e], y[3,:,e])
+            ax4.set_xlim([-1,1])
+            ax4.set_ylim([-0.1,1])
+            ax4.axis('equal')
+            ax4.set_title('y(2),y(3)')
+            
+    
+    if ptype not in {'pfs','pca'}:
         plt.title(title, fontsize=10)
         plt.xlabel(axis_labels[0], fontsize=10)
         plt.ylabel(axis_labels[1], fontsize=10)
@@ -199,9 +247,8 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
         plt.legend(frameon=False, prop={'size': 10})
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-    
+        plt.tight_layout()
 
-    plt.tight_layout()
     filepath = "{0}-{1}_plot.svg".format(basepath,ptype)
     plt.savefig(filepath, dpi=600, bbox_inches='tight')
 
@@ -337,9 +384,9 @@ def prepare_pfs(df, neurons, visualize, labels):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='TestRecruitmentAlmost',
+    parser.add_argument("--dir", type=str, default='PCATest2',
                         help="Directory to read and write files")
-    parser.add_argument("--plot", type=str, default='remapping',
+    parser.add_argument("--plot", type=str, default='pca',
                         help = 'Which plot to make')
     
 
@@ -359,7 +406,7 @@ if plot in {'placefields'}:
 elif plot in {'spatialinfo'}:
     df = load_dataframe('placecells', basepath)
 elif plot in {'remapping','nrooms', 'overlap', 'spatialcorr', 'variance_remap', 'multispatialcorr', 
-            'frdistance_pertuning', 'spatialcorr_pertuning', 'nrooms_pertuning'}:
+            'frdistance_pertuning', 'spatialcorr_pertuning', 'nrooms_pertuning', 'pca', 'remap_vec'}:
     df = load_dataframe('remapping', basepath)
 else:
     df = load_dataframe('recruitment', basepath)
@@ -373,10 +420,10 @@ if plot == 'placefields':
 
     visualize = ['arg_current_amp']
     labels = ['C']
-    params_sweep = [(0), (-10), (-20), (-30), (-100)]
+    params_sweep = [(0)] # (-10), (-20), (-30), (-100)]
     tags = ['pfs']
-    neurons = np.array([47,0,2,292,16,28,8,3,7,14,20,25,35])
-    colorsvect = [3,3,3,3,1]
+    neurons = np.array([0,1,2,3,4,5,6,7])
+    colorsvect = [1,1,1,1,1,1,1,1]
 
     df = filter(df, visualize, params_sweep, tags)
     newdf = prepare_pfs(df, neurons, visualize, labels)
@@ -394,11 +441,11 @@ elif plot == 'spatialinfo':
 
     visualize = ['arg_dim_bbox', 'arg_env', 'arg_nb_neurons', 'arg_load_id', 'arg_encoding']
     labels = ['d', 'e', 'n', 'l']
-    params_sweep = [(8,0,256,0,'rotation')]
+    params_sweep = [(4,2,8,0,'rotation')]
     tags = ['spatialinfo', 'spatialinfo_bins']
 
     df = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_combine(df, tags,['hist','bins'], labels, visualize)
+    newdf = prepare_single(df, tags,['hist','bins'], labels, visualize)
     
 
     title = 'Spatial information distribution'
@@ -412,7 +459,7 @@ if plot == 'remapping' or plot == 'nrooms':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons']
     labels = ['d', 'n']
-    params_sweep = [(16,512)]
+    params_sweep = [(2,6)]
     tags = ['nrooms', 'nrooms_bins']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -428,7 +475,7 @@ if plot == 'remapping' or plot == 'overlap':
 
     visualize = ['arg_encoding', 'arg_embedding_sigma']
     labels = ['e', 's']
-    params_sweep = [('rotation', 1),('parallel',1),('flexible',1)]
+    params_sweep = [('rotation', -1),('parallel',-1),('flexible',-1)]
     tags = ['overlap', 'overlapshuff']
     
     fdf = filter(df, visualize, params_sweep, tags)
@@ -444,7 +491,7 @@ if plot == 'remapping' or plot == 'spatialcorr':
 
     visualize = ['arg_encoding', 'arg_embedding_sigma']
     labels = ['e', 's']
-    params_sweep = [('rotation', 1),('parallel',1),('flexible',1)]
+    params_sweep = [('rotation', -1),('parallel',-1),('flexible',-1)]
     tags = ['spatialcorr', 'spatialcorrshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -460,7 +507,7 @@ if plot == 'remapping' or plot == 'variance_remap':
 
     visualize = ['arg_encoding', 'arg_embedding_sigma']
     labels = ['e', 's']
-    params_sweep = [(e,s) for e in {'rotation'} for s in [0,0.2,0.4,0.6000000000000001,0.8,1]]
+    params_sweep = [(e,s) for e in {'rotation'} for s in [0,0.2,0.4,0.6000000000000001,0.8,-1]]
     tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -484,7 +531,7 @@ if plot == 'remapping' or plot == 'multispatialcorr':
 
     visualize = ['arg_encoding', 'arg_embedding_sigma']
     labels = ['e', 's']
-    params_sweep = [('flexible',1)]
+    params_sweep = [('rotation',-1)]
     tags = ['multispatialcorr', 'multispatialcorrshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -500,7 +547,7 @@ if plot == 'remapping' or plot == 'frdistance_pertuning':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_encoding']
     labels = ['d', 'n', 'l']
-    params_sweep = [(16,512,0, 'flexible')]
+    params_sweep = [(2,6,0, 'rotation')]
     tags = ['frdistance_pertuning', 'frdistance_pertuningshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -516,7 +563,7 @@ if plot == 'remapping' or plot == 'spatialcorr_pertuning':
 
     visualize = ['arg_encoding', 'arg_embedding_sigma']
     labels = ['e', 's']
-    params_sweep = [('flexible',1)]
+    params_sweep = [('rotation',-1)]
     tags = ['spatialcorr_pertuning', 'spatialcorr_pertuningshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -532,7 +579,7 @@ if plot == 'remapping' or plot == 'nrooms_pertuning':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_encoding']
     labels = ['d', 'n', 'l']
-    params_sweep = [(16,512,0,'flexible')]
+    params_sweep = [(2,6,0,'rotation')]
     tags = ['nrooms_pertuning', 'nrooms_pertuningshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -543,6 +590,38 @@ if plot == 'remapping' or plot == 'nrooms_pertuning':
     print("Plotting results...")
     namea = name + '-' + 'nrooms_pertuning'
     make_plot('scatter', newdf, title, axis_labels, namea)
+
+if plot == 'remapping' or plot == 'pca':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_embedding_sigma', 'arg_encoding']
+    labels = ['d', 'n', 's']
+    params_sweep = [(3,20,0.1,'random')]
+    tags = ['var_explained_r', 'pca_proj_r', 'y_trajs']
+
+    fdf = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(fdf, tags,['var_r','proj_r','y_trajs'], labels, visualize)
+    
+    title = 'PCA analysis'
+    axis_labels = [] 
+    print("Plotting results...")
+    namea = name + '-' + 'pca'
+    make_plot('pca', newdf, title, axis_labels, namea)
+
+if plot == 'remapping' or plot == 'remap_vec':
+
+    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_encoding']
+    labels = ['d', 'n', 'l']
+    params_sweep = [(4,128,0,'parallel')]
+    tags = ['norm_remap','norm_Dy','norm_Dye','norm_nu']
+
+    fdf = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label='arg_encoding', labels= labels, visualize=visualize)
+    
+    title = 'Remapping vector norm decompositon'
+    axis_labels = ['','Norm'] 
+    print("Plotting results...")
+    namea = name + '-' + 'remap_vec'
+    make_plot('bars', newdf, title, axis_labels, namea)
 
 #### Recruitment plots #############
 
