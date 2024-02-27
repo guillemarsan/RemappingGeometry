@@ -499,7 +499,7 @@ def plot_pe(p, eofp, e, t, basepath):
     else:
         rows = int(np.sqrt(eofp.shape[0]))
         step = (2/(rows-1))/2
-        im = ax1.imshow(eofp, extent=[-1, 1, -1, 1], vmin=-0.9, vmax=0.9)
+        im = ax1.imshow(eofp[-1,:,:], extent=[-1, 1, -1, 1], vmin=-0.9, vmax=0.9)
         fig.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
         ax1.plot(p[0,:],p[1,:], 'k')
         plt.title('e%i(p)' % e.shape[0])

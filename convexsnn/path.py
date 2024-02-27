@@ -3,6 +3,7 @@ import scipy.signal, scipy.ndimage
 import numpy as np
 import time
 from utils import compute_meshgrid
+from scipy.stats import ortho_group
 
 
 
@@ -113,11 +114,10 @@ def get_path(dpcs, type, tmax, path_seed=0):
 
 def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
 
-    def gram(x):
-        sigma = 0.75
+    def gram(x, sigma=5, l=2):
         condensed_dist = scipy.spatial.distance.pdist(x)
         dist = scipy.spatial.distance.squareform(condensed_dist)
-        gram = np.exp(-1 * (dist ** 2) / (2*sigma))
+        gram = sigma**2 * np.exp(-1 * (dist ** 2) / (2*(l**2)))
         return gram
     
     def mesh(num_bins, dim_pcs):
@@ -135,76 +135,99 @@ def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
 
     
     dim_pcs = p.shape[0]
-    sqrtnum_bins = 21
+    sqrtnum_bins = 20
     num_bins = sqrtnum_bins**2
 
     step, points = mesh(num_bins, dim_pcs)
     
     covar = gram(points.T)
 
-    e = np.zeros((dim_e, p.shape[1]))
-    de = np.zeros((dim_e, p.shape[1]))
-    for i in np.arange(dim_e): 
+    
+    eofp = np.ones((dim_e, p.shape[1]))
+    np.random.seed(env)
+    if variance == -1:
         if not flexible:
-            np.random.seed(70+i)
-            # canonic = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
-            # canonic = canonic/(2*np.max(np.abs(canonic))) # set it [-0.5,05]
-            # canonic = np.zeros(points.shape[1]) - 0.9
-            np.random.seed(env+i*50)
-            if variance == -1:
-                nu = np.random.uniform(-1,1) # [-1, 1]
-            else:
+            nu = np.random.uniform(-1,1,(dim_e,1))
+            eofp = eofp * nu
+        else:
+            vel = 0.25*np.sqrt(dim_e)
+            # abs = np.random.uniform(-vel, vel, (dim_pcs,dim_e))
+            # abs = vel*abs/np.linalg.norm(abs,axis=0)
+            c = np.random.uniform(-1,1,(dim_e,1))
+            # eofp = abs.T @ points + c
+            th = ortho_group.rvs(dim_e)[:,:dim_pcs]
+            eofp = vel*th @ points + c
+    else:
+        for i in np.arange(dim_e): 
+            if not flexible:
+                # np.random.seed(70+i)
+                # canonic = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
+                # canonic = canonic/(2*np.max(np.abs(canonic))) # set it [-0.5,05]
+                # canonic = np.zeros(points.shape[1]) - 0.9
                 nu = 2
                 while nu > 1 or nu < -1:
                     nu = np.random.normal(0,variance)
-            # eofp = nu + canonic
-            eofp = np.ones(points.shape[1])*nu
+                # eofp = nu + canonic
+                eofp[i,:] = np.ones(points.shape[1])*nu
         else:
-            np.random.seed(env+i)
-            if variance == -1:
-                eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
-                eofp =  eofp/(np.max(np.abs(eofp))) # [-1,1]
+            # eofp = np.random.uniform(-1,1,size=points.shape[1])
+            # eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
+            # a = np.random.uniform(-0.5,0.5)
+            # b = np.random.uniform(-0.5,0.5)
+            # c = np.random.uniform(-1,1)
+            # eofp[i,:] = a*points[0,:]+b if dim_pcs == 1 else a*points[0,:] + b*points[1,:] +c
+            # eofp = scipy.stats.norm.cdf(eofp)-0.5
+            # mean = np.random.uniform(-1,1) # [-1, 1]
+            # eofp = eofp - np.mean(eofp) + mean
+            # eofp = np.sin(eofp)
+            # eofp =  eofp/(np.max(np.abs(eofp))) # [-1,1]
+            eofp[i,:] = np.random.multivariate_normal(np.zeros(points.shape[1]),variance*covar)
+            # TODO constrain
+
+    # eofp = 5*(eofp - eofp[:,:1])/np.linalg.norm(eofp[:,1]) + eofp[:,:1]
+    eofp = (eofp + 1) % 2 - 1
+    if dim_pcs == 2: eofp = eofp.reshape((-1, sqrtnum_bins,sqrtnum_bins))
+
+    # upsample cause gram matrix is limiting
+    upscale = False
+    factor = 5 if upscale else 1
+    if upscale: 
+        factor = 5
+        eofpf = np.zeros((eofp.shape[0], factor*eofp.shape[1])) if dim_pcs == 1 else np.zeros((eofp.shape[0], factor*eofp.shape[1], factor*eofp.shape[2]))
+        for i in np.arange(dim_e):
+            if dim_pcs == 1:
+                eofpf[i,:] = np.repeat(eofp[i,:], factor)
+                filter = np.ones(factor)/factor
+                eofpf[i,:] = scipy.ndimage.convolve1d(eofpf[i,:], filter, mode='nearest')
+                step_up, _ = mesh(factor*num_bins, dim_pcs)
             else:
-                eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),variance*covar)
+                eofpf[i,:,:] = np.repeat(np.repeat(eofp[i,:,:], factor, axis=0), factor, axis=1)
+                filter = np.ones((factor,factor))/(factor**2)
+                t0 = time.time()
+                eofpf[i,:,:] = scipy.signal.convolve2d(eofpf[i,:,:], filter, mode='same', boundary='symm')
+                t1 = time.time()
+                print(t1-t0)
+                step_up, _ = mesh(factor**2*num_bins, dim_pcs)
+        eofp = eofpf
+    else: step_up, _ = mesh(factor**2*num_bins, dim_pcs)
 
+    # Get path intersection
+    # t0 = time.time()
+    # eofplin = eofp.reshape(-1,)
+    # for j in np.arange(eofplin.shape[0]):
+    #     dist = np.max(np.abs(np.expand_dims(points_up[:,j],-1)-p), axis=0) # Manhattan distance
+    #     de[i,np.argwhere(dist < step_up)] = eofplin[j]
+    # t1 = time.time()
+    # print(t1-t0)
 
-
-        # upsample cause gram matrix is limiting
-        factor = 50
-        if dim_pcs == 1:
-            eofp = np.repeat(eofp, factor)
-
-            filter = np.ones(factor)/factor
-            eofp = scipy.ndimage.convolve1d(eofp, filter, mode='nearest')
-
-            step_up, points_up = mesh(factor*num_bins, dim_pcs)
-        else:
-            eofp = eofp.reshape((sqrtnum_bins,sqrtnum_bins))
-            eofp = np.repeat(np.repeat(eofp, factor, axis=0), factor, axis=1)
-
-            filter = np.ones((factor,factor))/(factor**2)
-
-            t0 = time.time()
-            eofp = scipy.signal.convolve2d(eofp, filter, mode='same', boundary='symm')
-            t1 = time.time()
-            print(t1-t0)
-            
-            step_up, points_up = mesh(factor**2*num_bins, dim_pcs)
-
-        # Get path intersection
-        # t0 = time.time()
-        # eofplin = eofp.reshape(-1,)
-        # for j in np.arange(eofplin.shape[0]):
-        #     dist = np.max(np.abs(np.expand_dims(points_up[:,j],-1)-p), axis=0) # Manhattan distance
-        #     de[i,np.argwhere(dist < step_up)] = eofplin[j]
-        # t1 = time.time()
-        # print(t1-t0)
-
+    e = np.zeros((dim_e, p.shape[1]))
+    de = np.zeros((dim_e, p.shape[1]))
+    for i in np.arange(dim_e):
         if dim_pcs == 1:
             t0 = time.time()
             origin = np.array([-1])[:,np.newaxis]
             idcs = (np.abs(p - origin) // (2*step_up)).astype(int)
-            e[i,:] = eofp[idcs]
+            e[i,:] = eofp[i,idcs]
             t1 = time.time()
             print(t1-t0)
 
@@ -212,7 +235,7 @@ def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
             t0 = time.time()
             origin = np.array([-1,1])[:,np.newaxis]
             idcs = (np.abs(p - origin) // (2*step_up)).astype(int)
-            e[i,:] = eofp[idcs[0,:],idcs[1,:]]
+            e[i,:] = eofp[i,idcs[0,:],idcs[1,:]]
             t1 = time.time()
             print(t1-t0)
 

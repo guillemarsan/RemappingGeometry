@@ -11,7 +11,8 @@ from convexsnn.network import get_model
 
 b = 400 #number of bins
 radius = 1 #radius of the environment
-bin_size = (2*radius)**2/b #bin_size
+area = (2*radius)**2
+bin_size = area/b #bin_size
 tostore = lambda array: np.array2string(array, separator=',', suppress_small=True, threshold=np.inf, max_line_width=np.inf)
 
 ##################### DATA LOAD ###################################
@@ -64,8 +65,11 @@ def read_pfs(set, neu, b, dirs, ratemaps=False):
 def read_D(point, neu, dbbox):
 
     D = np.zeros((neu, dbbox))
+    sepnorm = None if not point['arg_model_sepnorm'] else point['arg_dim_pcs']*2
     _, D, _ = get_model(dbbox ,neu, dbbox, connectivity=point['arg_model'], decod_amp=point['arg_decoder_amp'], 
-                    load_id=point['arg_load_id'], conn_seed=point['arg_conn_seed'])
+                    load_id=point['arg_load_id'], conn_seed=point['arg_conn_seed'], lognor_seed=point['arg_lognor_seed'], 
+                    lognor_sigma=point['arg_lognor_sigma'], rnn=point['arg_rnn'], uninorm=point['arg_model_uninorm'],
+                    sepnorm=sepnorm)
     
     return D
 
@@ -157,10 +161,12 @@ def analyse_pfs_r(point):
 
     pcsidx = np.where(meanfr > 0)[0]
     perpcs = pcsidx.shape[0]/neu
+    meanperpfsize = np.mean(pfsize[pfsize > 0])/area
 
     # point['spikes'] = tostore(spikes)
     point['meanfr'] = tostore(meanfr)
     point['pfsize'] = tostore(pfsize)
+    point['meanperpfsize'] = meanperpfsize
     point['occupancies'] = tostore(occupancies)
     point['pcsidx'] = tostore(pcsidx)
     point['perpcs'] = perpcs
@@ -217,10 +223,12 @@ def analyse_ratemaps_pfs_s(point):
 
     pcsidx = np.where(meanfr > 0)[0]
     perpcs = pcsidx.shape[0]/neu
+    meanperpfsize = np.mean(pfsize[pfsize > 0])/area
 
     point['spikes'] = tostore(spikes)
     point['meanfr'] = tostore(meanfr)
     point['pfsize'] = tostore(pfsize)
+    point['meanperpfsize'] = meanperpfsize
     point['occupancies'] = tostore(occupancies)
     point['pcsidx'] = tostore(pcsidx)
     point['perpcs'] = perpcs
@@ -231,9 +239,6 @@ def analyse_ratemaps_pfs_s(point):
     np.savetxt(pfs_name, placefields, fmt='%.3e')
     point['ratemaps'] = ratemaps_name
     point['pfs'] = pfs_name
-
-    
-    
 
     return point
 
@@ -334,6 +339,8 @@ def analyse_remapping(set, params):
     D = read_D(point, neu, dbbox)
     all_ratemaps = read_pfs(set, neu, b, dirs, ratemaps=True)
 
+    analyse_combine_stats(set, point)
+
     if point['arg_dim_pcs'] == 1:
         analyse_pca(point, all_ratemaps, D)
     
@@ -357,6 +364,31 @@ def alignment(a,b):
 
 def distance(a,b):
     return np.abs(a - b)
+
+def analyse_combine_stats(set,point):
+
+    dirs = set['arg_env'].shape[0]
+    dbbox = set.iloc[0]['arg_dim_bbox']
+    dpcs = set.iloc[0]['arg_dim_pcs']
+    denvs = (dbbox/2) - dpcs
+    meanperpfsizes = np.zeros(dirs)
+    perpcs = np.zeros(dirs)
+    dimp_errors = np.zeros(dirs)
+    dime_errors = np.zeros(dirs)
+    dimg_errors = np.zeros(dirs)
+    for i in np.arange(dirs):
+        meanperpfsizes[i] = set.iloc[i]['meanperpfsize']
+        perpcs[i] = set.iloc[i]['perpcs']
+        dimg_errors[i] = set.iloc[i]['g_error']/np.sqrt(dpcs)
+        if set.iloc[0]['arg_encoding'] != 'rotation': 
+            dimp_errors[i] = set.iloc[i]['p_error']/np.sqrt(dpcs)
+            dime_errors[i] = set.iloc[i]['e_error']/np.sqrt(denvs)
+
+    point['meanperpfsizes'] = tostore(meanperpfsizes)
+    point['perpcs'] = tostore(perpcs)
+    point['dimg_errors'] = tostore(dimg_errors)
+    point['dimp_errors'] = tostore(dimp_errors)
+    point['dime_errors'] = tostore(dime_errors)
 
 def analyse_pca(point, all_ratemaps, D):
 
@@ -434,6 +466,15 @@ def analyse_nrooms(set, point):
 
 def analyse_overlap(set, point):
 
+    def overlapshufflambda(m1,m2):
+        resshuff = 0
+        for _ in np.arange(20):
+            shuff = m1[np.random.permutation(m1.shape[0])]
+            aux = alignment(shuff, m2)
+            if aux is not None:
+                resshuff += aux
+        return resshuff/20
+
     # Read meanfr
     dirs = set['arg_env'].shape[0]
     neu = set.iloc[0]['arg_nb_neurons']
@@ -449,31 +490,45 @@ def analyse_overlap(set, point):
 
     num_pairs = int(dirs*(dirs-1)/2) # Gauss formula
     resultsp = np.zeros(num_pairs)
+    resultspbin = np.zeros(num_pairs)
     resultspshuff = np.zeros(num_pairs)
+    resultspbinshuff = np.zeros(num_pairs)
     pair_idx = 0
     for dir_idx in np.arange(dirs):
         for dir_idx2 in np.arange(dir_idx):
             # loop axis are the first ones
             resultsp[pair_idx] = alignment(meanfr[:,dir_idx], meanfr[:,dir_idx2])
-
-            shuffmeanfr = meanfr[:,dir_idx][np.random.permutation(meanfr.shape[0])]
-            resultspshuff[pair_idx] = alignment(shuffmeanfr, meanfr[:,dir_idx2])
+            resultspbin[pair_idx] = alignment(meanfr[:,dir_idx] > 0, meanfr[:,dir_idx2] >0)
+            resultspshuff[pair_idx] = overlapshufflambda(meanfr[:,dir_idx], meanfr[:,dir_idx2])
+            resultspbinshuff[pair_idx] = overlapshufflambda(meanfr[:,dir_idx] > 0, meanfr[:,dir_idx2] >0)
             pair_idx += 1
     
     point['overlap'] = tostore(resultsp)
+    point['overlapbin'] = tostore(resultspbin)
     point['overlapshuff'] = tostore(resultspshuff)
+    point['overlapbinshuff'] = tostore(resultspbinshuff)
 
 
 def analyse_spatialcorr(point, all_pfs):
 
-    def spatialcorrlambda(m1, m2, shuffle):
-        if shuffle: m1 = m1[:, np.random.permutation(m1.shape[1])]
+    def spatialcorrlambda(m1, m2):
         in_both_active = (m1>0).any(axis=1)*(m2>0).any(axis=1)
         if np.any(in_both_active):
             m1 = m1[in_both_active]
             m2 = m2[in_both_active]
             return np.mean(alignment(m1,m2))
         else: return None
+
+    def spatialcorrshufflambda(m1,m2):
+        resshuff = 0
+        i = 0
+        for _ in np.arange(20):
+            shuff = m1[:, np.random.permutation(m1.shape[1])]
+            aux = spatialcorrlambda(shuff, m2)
+            if aux is not None:
+                resshuff += aux
+                i += 1
+        return resshuff/i
     
     # Only environments that have a common active neuron
     dirs = all_pfs.shape[2]
@@ -495,11 +550,11 @@ def analyse_spatialcorr(point, all_pfs):
     resultspshuff = np.array([])
     for dir_idx in np.arange(dirs):
         for dir_idx2 in np.arange(dir_idx):
-            res = spatialcorrlambda(all_pfs[:,:,dir_idx], all_pfs[:,:,dir_idx2], shuffle = False)
+            res = spatialcorrlambda(all_pfs[:,:,dir_idx], all_pfs[:,:,dir_idx2])
             if res is not None:
                 resultsp = np.append(resultsp, res) 
 
-            resshuff = spatialcorrlambda(all_pfs[:,:,dir_idx], all_pfs[:,:,dir_idx2], shuffle = True)
+            resshuff = spatialcorrshufflambda(all_pfs[:,:,dir_idx], all_pfs[:,:,dir_idx2])
             if resshuff is not None:
                 resultspshuff = np.append(resultspshuff, resshuff)     
     
@@ -719,7 +774,7 @@ def analyse_coveredarea_perclass(row, point):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='PCATest2',
+    parser.add_argument("--dir", type=str, default='PosterFlexiblenn',
                         help="Directory to read and write files")
     parser.add_argument("--compute", type=str, default='remapping',
                         help = 'Which thing to analyse to make')

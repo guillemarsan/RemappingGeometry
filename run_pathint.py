@@ -18,7 +18,7 @@ import convexsnn.plot as plot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=1,
+    parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of space")
     parser.add_argument("--path_type", type=str, default='grid',
                         help='Type of path the animal does')
@@ -27,23 +27,25 @@ if __name__ == "__main__":
     parser.add_argument('--path_seed',type=int, default=0,
                         help="Random seed for the path in case of random")
     
-    parser.add_argument("--encoding", type=str, default='rotation',
+    parser.add_argument("--encoding", type=str, default='flexible',
                         help='Determines the type of encoder between rotation, parallel and flexible')
-    parser.add_argument("--dim_bbox", type=int, default=2,
+    parser.add_argument("--dim_bbox", type=int, default=32,
                         help="Dimensionality of latent space")
-    parser.add_argument('--env', type=int, default=1,
+    parser.add_argument('--env', type=int, default=0,
                         help="Environment id")
     parser.add_argument('--embedding_sigma', type=float, default=-1,
                         help="Variance in case of biased embedding (not -1)")
     parser.add_argument("--input_amp", type=float, default=1.,
                         help="Amplitude of input")
+    parser.add_argument("--input_sepnorm",action='store_true', default=False,
+                        help="Normalize separate the first 2*dpcs dimensions. Only for parallel, flexible")
     parser.add_argument("--input_scale", action='store_true', default=True,
                         help="Scale the input by sqrtdbbox") 
     
     
-    parser.add_argument("--nb_neurons", type=int, default=6,
+    parser.add_argument("--nb_neurons", type=int, default=512,
                         help="Number of neurons")
-    parser.add_argument("--model", type=str, default='load-polyae',
+    parser.add_argument("--model", type=str, default='randclosed-load-polyae',
                         help="Type of model")
     parser.add_argument("--rnn", action='store_true', default=True,
                         help="Either rnn or feed-forward")
@@ -51,8 +53,12 @@ if __name__ == "__main__":
                         help='Determines the type of simulation between integrator (pathint) and one spike (one)')
     parser.add_argument('--conn_seed',type=int, default=0,
                         help="Random seed for the connectivity in case of random")
-    parser.add_argument("--load_id", type=int, default=0,
-                        help="Id of the connectivity in case of load") 
+    parser.add_argument("--load_id", type=int, default=1,
+                        help="Id of the connectivity in case of load")
+    parser.add_argument("--model_uninorm",action='store_true', default=False,
+                        help="Normalize separate each couple of dimensions") 
+    parser.add_argument("--model_sepnorm",action='store_true', default=False,
+                        help="Normalize separate the first 2*dpcs dimensions. Only for parallel, flexible") 
     parser.add_argument("--decoder_amp", type=float, default=1,
                         help="Amplitude of decoder matrix D")
     parser.add_argument("--thresh_amp", type=float, default=1,
@@ -97,9 +103,11 @@ if __name__ == "__main__":
     n = args.nb_neurons
 
     print('Loading model...')
+    sepnorm = None if not args.model_sepnorm else args.dim_pcs*2
     model, D, G = get_model(dbbox ,n, dbbox,connectivity=args.model, decod_amp=args.decoder_amp, 
                     thresh_amp=args.thresh_amp, load_id=args.load_id, conn_seed=args.conn_seed, 
-                    lognor_seed=args.lognor_seed, lognor_sigma=args.lognor_sigma, rnn=args.rnn)
+                    lognor_seed=args.lognor_seed, lognor_sigma=args.lognor_sigma, rnn=args.rnn, uninorm=args.model_uninorm,
+                    sepnorm=sepnorm)
 
     # Load gamma path
     print('Loading path...')
@@ -143,6 +151,13 @@ if __name__ == "__main__":
         dx = dk
 
     # Scale of input
+    if args.input_sepnorm:
+        x[:args.dim_pcs*2,:] = 1/np.sqrt(2) * x[:args.dim_pcs*2,:]/np.linalg.norm(x[:args.dim_pcs*2,:],axis=0)  
+        x[args.dim_pcs*2:,:] = 1/np.sqrt(2) * x[args.dim_pcs*2:,:]/np.linalg.norm(x[args.dim_pcs*2:,:],axis=0) 
+        if args.simulate != 'minimization':
+            dx[:args.dim_pcs*2,:] = 1/np.sqrt(2) * dx[:args.dim_pcs*2,:]/np.linalg.norm(dx[:args.dim_pcs*2,:],axis=0)  
+            dx[args.dim_pcs*2:,:] = 1/np.sqrt(2) * dx[args.dim_pcs*2:,:]/np.linalg.norm(dx[args.dim_pcs*2:,:],axis=0) 
+
     if args.input_scale:
         x = np.sqrt(dbbox)*x
         dx = np.sqrt(dbbox)*dx
@@ -187,8 +202,8 @@ if __name__ == "__main__":
 
     # Decode
     x_hat = bias_corr*x_hat
-
     k_hat = Theta.T @ x_hat if args.encoding == 'rotation' else x_hat
+    k_hat = k_hat/np.sqrt(dbbox) if args.input_scale else k_hat/args.input_amp
     g_hat = Encoder.decode(k_hat)
 
 

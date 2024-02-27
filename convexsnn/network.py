@@ -4,7 +4,7 @@ import numpy as np
 from convexsnn.ConvexSNN import ConvexSNN
 
 def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0, 
-              conn_seed=0, lognor_seed=0, lognor_sigma=0.2, rnn=True):
+              conn_seed=0, lognor_seed=0, lognor_sigma=0.2, rnn=True, uninorm=False, sepnorm=None):
 
     ones = np.ones((out,n))
     D = ones
@@ -133,10 +133,24 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0,
     elif connectivity == 'randclosed-load-polyae':
         filepath = './saved_bbox/seed' + str(load_id) + '/randclosed-load-polyae-dim-' + str(out) + '-n-' + str(n) + '-s-' + str(load_id) + '.npy'
         D = np.load(filepath) + 1e-5
+    elif connectivity == 'identity':
+        D = np.eye(n)
+        D = D[:out,:]
     
     lamb = 100
     nD = np.linalg.norm(D, axis=0)
     D = D/nD
+
+    if uninorm:
+        p = 0
+        for _ in np.arange(out/2):
+            D[[p,p+1],:] = 1/np.sqrt(out/2) * D[[p,p+1],:]/np.linalg.norm(D[[p,p+1],:],axis=0)
+            p += 2
+
+    if sepnorm is not None:
+        D[:sepnorm,:] = 1/np.sqrt(2) * D[:sepnorm,:]/np.linalg.norm(D[:sepnorm,:],axis=0)
+        D[sepnorm:,:] = 1/np.sqrt(2) * D[sepnorm:,:]/np.linalg.norm(D[sepnorm:,:],axis=0)
+
     if connectivity != 'custom': 
         F = D.T
 

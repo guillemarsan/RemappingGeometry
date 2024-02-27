@@ -6,7 +6,7 @@ class AngleEncoder():
         dim = g.shape[0]
         
         # pe to alpha
-        cycles = np.pi/2
+        cycles = np.pi # np.pi/2
         alpha = cycles * (g + 1)
         if dg is not None: dalpha = cycles * dg
 
@@ -44,11 +44,11 @@ class AngleEncoder():
         j = 0
         for i in np.arange(dim):
             alpha[i,:] = np.arctan2(s_hat[j+1,:],s_hat[j,:])
-            alpha[i,alpha[i,:] < -np.pi/2] += 2*np.pi
+            alpha[i,alpha[i,:] < 0] += 2*np.pi
             j += 2
 
         # alpha to pe
-        cycles = np.pi/2
+        cycles = np.pi #np.pi/2
         g_hat = alpha/cycles - 1
 
         return g_hat

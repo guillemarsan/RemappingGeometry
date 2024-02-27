@@ -86,6 +86,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
         conditions = []
 
         xticks = np.arange(len(data),step=2)
+        j = 0
         for i in xticks:
             
             point = data.iloc[i]
@@ -94,17 +95,20 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
             sem = point['sem']
             meanshuff = pointshuff['mean']
             semshuff = pointshuff['sem']
+            values = point['values'][0]
 
             
             conditions.append(point['xaxis'][0])
             
-            j = i//2
-            plt.bar(j-0.2, mean, width=0.36, align='center', color=c[i])
-            plt.errorbar(j-0.2, mean, sem, ecolor='black',capsize=10)
-            plt.bar(j+0.2, meanshuff, width=0.36, align='center', color=c[i],alpha=0.5)
-            plt.errorbar(j+0.2, meanshuff, semshuff, ecolor='black',capsize=10)
-
-        plt.xticks(xticks//2, conditions)
+            plt.bar(j, mean, width=0.7, align='center', color=c[i], alpha=0.5)
+            jitter = 0 #np.random.uniform(-0.05,0.05,values.shape[0])
+            plt.scatter(np.ones_like(values)*j+jitter, values, color=c[i], edgecolor='grey', linewidth=0.5)
+            plt.hlines(meanshuff, j-0.4, j+0.4, color=c[i])
+            plt.errorbar(j, mean, 2*sem[0], ecolor='black',capsize=10)
+            j += 1
+            
+        plt.xticks(np.arange(j), conditions)
+        plt.gca().set_aspect(3)
 
     elif ptype == 'bars':
         c = plt.rcParams['axes.prop_cycle'].by_key()['color']
@@ -154,7 +158,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
             colorgroups = np.concatenate([np.full(count, i) for i, count in enumerate(colorsvect)])
         cases = len(data)
         neurons = data.iloc[0]['neurons']
-        num_neurons = neurons.shape[0]
+        num_neurons = len(neurons)
         i = 1
         
         for _, point in data.iterrows():
@@ -169,7 +173,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
             maxFR = np.max(pfs)
             for cell in np.arange(num_neurons):
 
-                c_sat = c[cell] if colorsvect is None else c[colorgroups[cell]]
+                c_sat = c[cell % 10] if colorsvect is None else c[colorgroups[cell % 10]]
                 cmap = colors.ListedColormap(['white', c_sat])
                 bounds=[0,0,maxFR]
                 norm = colors.BoundaryNorm(bounds, cmap.N)
@@ -180,7 +184,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
                 alphas = pf/np.max(pf) if np.max(pf) > 0 else 0
                 im = axsub.imshow(pf, alpha=alphas, cmap=cmap, norm=norm, extent=[-1,1,-1,1])
                 if np.max(pf)>0:
-                    axsub.text(0.7, -ti*0.15, '{:.2f}Hz'.format(np.max(pf)), wrap=True, transform=axsub.transAxes, color=c_sat, horizontalalignment='center', fontsize=4)
+                    axsub.text(0.7, -ti*0.15, '{:.2f}Hz'.format(np.max(pf)), wrap=True, transform=axsub.transAxes, color=c_sat, horizontalalignment='center', fontsize=10)
                     ti += 1
             i += 1
 
@@ -319,7 +323,7 @@ def prepare_combine(df, across, data_label, xaxis_label, labels, visualize):
 
             if across:
                 means = np.mean(list._values)
-                sems = np.std(list._values)/len(list)
+                sems = np.std(list._values)/np.sqrt(len(list))
                 xaxis = np.array(eval(set.iloc[0][xaxis_label]))
             else:
                 means = []
@@ -328,9 +332,10 @@ def prepare_combine(df, across, data_label, xaxis_label, labels, visualize):
                 i = 0
                 for elem in list._values:
                     means.append(np.mean(elem))
-                    sems.append(np.std(elem)/elem.shape[0])
+                    sems.append(np.std(elem)/np.sqrt(elem.shape[0]))
                     xaxis.append(set.iloc[i][xaxis_label])
                     i += 1
+                newpoint['values'] = [list._values]
             newpoint['mean'] = [means]
             newpoint['sem'] = [sems]
             newpoint['xaxis'] = [xaxis]
@@ -352,7 +357,7 @@ def prepare_combine(df, across, data_label, xaxis_label, labels, visualize):
     newdf = gb.apply(lambda x: combinelambda(x))
     return newdf 
 
-def prepare_pfs(df, neurons, visualize, labels):
+def prepare_pfs(df, neurons, visualize, labels, active=False):
 
     # Read the pfs
     newdf = pd.DataFrame([])
@@ -364,9 +369,17 @@ def prepare_pfs(df, neurons, visualize, labels):
             pfs = np.genfromtxt(res_file)
             t1 = time.time()
             print(t1-t0)
-        newpoint['pfs'] = pfs[neurons, :]
-        newpoint['neurons'] = neurons
-       
+        if not active:
+            newpoint['pfs'] = pfs[neurons, :]
+            newpoint['neurons'] = neurons
+        elif i == 0:
+            active_cells = np.where(np.any(pfs,axis=1))[0]
+            newpoint['pfs'] = pfs[active_cells[:neurons], :]
+            newpoint['neurons'] = active_cells[:neurons]
+        else:
+            newpoint['pfs'] = pfs[active_cells[:neurons], :]
+            newpoint['neurons'] = active_cells[:neurons]
+
         legend = ''
         j = 0
         for l_idx, l in enumerate(labels):
@@ -384,9 +397,9 @@ def prepare_pfs(df, neurons, visualize, labels):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='PCATest2',
+    parser.add_argument("--dir", type=str, default='PosterFlexiblenn',
                         help="Directory to read and write files")
-    parser.add_argument("--plot", type=str, default='pca',
+    parser.add_argument("--plot", type=str, default='measures',
                         help = 'Which plot to make')
     
 
@@ -405,7 +418,7 @@ if plot in {'placefields'}:
     df = load_dataframe('database', basepath)
 elif plot in {'spatialinfo'}:
     df = load_dataframe('placecells', basepath)
-elif plot in {'remapping','nrooms', 'overlap', 'spatialcorr', 'variance_remap', 'multispatialcorr', 
+elif plot in {'remapping','nrooms', 'measures', 'variance_remap', 'dims_remap', 'dims_stats', 'multispatialcorr', 
             'frdistance_pertuning', 'spatialcorr_pertuning', 'nrooms_pertuning', 'pca', 'remap_vec'}:
     df = load_dataframe('remapping', basepath)
 else:
@@ -418,22 +431,21 @@ print ("Plotting results...")
 
 if plot == 'placefields':
 
-    visualize = ['arg_current_amp']
-    labels = ['C']
-    params_sweep = [(0)] # (-10), (-20), (-30), (-100)]
+    visualize = ['arg_dim_bbox', 'arg_env']
+    labels = ['d', 'e']
+    params_sweep = [(64, 0), (64, 1), (64, 2)]
     tags = ['pfs']
-    neurons = np.array([0,1,2,3,4,5,6,7])
-    colorsvect = [1,1,1,1,1,1,1,1]
+    neurons = [0, 2, 5, 6, 9, 10, 11, 12, 14]
+    colorsvect = None #[1,1,1,1,1]
 
     df = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_pfs(df, neurons, visualize, labels)
+    newdf = prepare_pfs(df, neurons, visualize, labels, active=False)
 
     title = ''
     axis_labels = []
     print("Plotting results...")
     name += '-' + plot
     make_plot('pfs', newdf, title, axis_labels, name, colorsvect=colorsvect)
-
 
 
 #### Place cell plots #############
@@ -459,7 +471,7 @@ if plot == 'remapping' or plot == 'nrooms':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons']
     labels = ['d', 'n']
-    params_sweep = [(2,6)]
+    params_sweep = [(64,1024)]
     tags = ['nrooms', 'nrooms_bins']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -471,43 +483,27 @@ if plot == 'remapping' or plot == 'nrooms':
     namea = name + '-' + 'nrooms'
     make_plot('line', newdf, title, axis_labels, namea, ynormalized=False)
 
-if plot == 'remapping' or plot == 'overlap':
+if plot == 'remapping' or plot == 'measures':
 
-    visualize = ['arg_encoding', 'arg_embedding_sigma']
-    labels = ['e', 's']
-    params_sweep = [('rotation', -1),('parallel',-1),('flexible',-1)]
-    tags = ['overlap', 'overlapshuff']
+    visualize = ['arg_dim_bbox','arg_encoding']
+    labels = ['d', 'e']
+    params_sweep = [(64, 'flexible')]
+    tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff']
     
     fdf = filter(df, visualize, params_sweep, tags)
     newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label= 'arg_encoding', labels= labels, visualize=visualize)
     
-    title = 'FR overlap across environments'
-    axis_labels = ['', 'Overlap'] 
+    title = 'FR overlap and spatial corr. across environments'
+    axis_labels = ['', 'Overlap and Spatial Corr.'] 
     print("Plotting results...")
-    namea = name + '-' + 'overlap'
-    make_plot('bars_shuff', newdf, title, axis_labels, namea, ynormalized=True)
-
-if plot == 'remapping' or plot == 'spatialcorr':
-
-    visualize = ['arg_encoding', 'arg_embedding_sigma']
-    labels = ['e', 's']
-    params_sweep = [('rotation', -1),('parallel',-1),('flexible',-1)]
-    tags = ['spatialcorr', 'spatialcorrshuff']
-
-    fdf = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label= 'arg_encoding', labels= labels, visualize=visualize)
-    
-    title = 'Spatial correlation of place fields across environments'
-    axis_labels = ['', 'Spatial correlation'] 
-    print("Plotting results...")
-    namea = name + '-' + 'spatialcorr'
+    namea = name + '-' + 'measures'
     make_plot('bars_shuff', newdf, title, axis_labels, namea, ynormalized=True)
 
 if plot == 'remapping' or plot == 'variance_remap':
 
-    visualize = ['arg_encoding', 'arg_embedding_sigma']
-    labels = ['e', 's']
-    params_sweep = [(e,s) for e in {'rotation'} for s in [0,0.2,0.4,0.6000000000000001,0.8,-1]]
+    visualize = ['arg_encoding', 'arg_dim_bbox', 'arg_embedding_sigma']
+    labels = ['e', 'd', 's']
+    params_sweep = [('rotation',16,s) for s in [0, 0.1, 0.25, 0.5, 1]]
     tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -527,11 +523,59 @@ if plot == 'remapping' or plot == 'variance_remap':
     namea = name + '-' + 'variance_remap'
     make_plot('line', newdf, title, axis_labels, namea, legends, ynormalized=True)
 
+if plot == 'remapping' or plot == 'dims_remap':
+
+    visualize = ['arg_dim_bbox', 'arg_embedding_sigma']
+    labels = ['d', 's']
+    params_sweep = [(d, -1) for d in [8, 16, 32, 64, 128]]
+    tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff', 'overlapbin', 'overlapbinshuff']
+
+    fdf = filter(df, visualize, params_sweep, tags)
+
+    # Xaxis variable
+    xaxis = 'arg_dim_bbox'
+    xaxislabel = 'd'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(fdf, across=False, data_label=tags, xaxis_label=xaxis, labels=labels, visualize=visualize)
+    
+    title = 'Embedding space dimensionality'
+    axis_labels = ['Dimension', 'Metric'] 
+    legends = ['Overlap', 'Overlap (Shuffle)', 'Spatial correlation', 'Spatial correlation (Shuffle)', 'Binary Overlap','Binary Overlap (Shuffle)']
+    print("Plotting results...")
+    namea = name + '-' + 'dims_remap'
+    make_plot('line', newdf, title, axis_labels, namea, legends, ynormalized=True)
+
+if plot == 'remapping' or plot == 'dims_stats':
+
+    visualize = ['arg_dim_bbox', 'arg_embedding_sigma']
+    labels = ['d', 's']
+    params_sweep = [(d, -1) for d in   [8, 16, 32, 64, 128]]
+    tags = ['perpcs', 'meanperpfsizes', 'dimp_errors', 'dime_errors'] # 'dimg_errors'] # 
+
+    fdf = filter(df, visualize, params_sweep, tags)
+
+    # Xaxis variable
+    xaxis = 'arg_dim_bbox'
+    xaxislabel = 'd'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(fdf, across=False, data_label=tags, xaxis_label=xaxis, labels=labels, visualize=visualize)
+    
+    title = 'Statistics per dimension'
+    axis_labels = ['Dimension', 'Metric'] 
+    legends = ['PCs (%)', 'Mean PF size (%)', 'Position error', 'Env.variables error']
+    print("Plotting results...")
+    namea = name + '-' + 'dims_stats'
+    make_plot('line', newdf, title, axis_labels, namea, legends, ynormalized=True)
+
 if plot == 'remapping' or plot == 'multispatialcorr':
 
-    visualize = ['arg_encoding', 'arg_embedding_sigma']
-    labels = ['e', 's']
-    params_sweep = [('rotation',-1)]
+    visualize = ['arg_encoding', 'arg_dim_bbox']
+    labels = ['e', 'd']
+    params_sweep = [('rotation',8)]
     tags = ['multispatialcorr', 'multispatialcorrshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -561,9 +605,9 @@ if plot == 'remapping' or plot == 'frdistance_pertuning':
 
 if plot == 'remapping' or plot == 'spatialcorr_pertuning':
 
-    visualize = ['arg_encoding', 'arg_embedding_sigma']
-    labels = ['e', 's']
-    params_sweep = [('rotation',-1)]
+    visualize = ['arg_dim_bbox', 'arg_encoding', 'arg_embedding_sigma']
+    labels = ['d', 'e', 's']
+    params_sweep = [(64,'flexible',-1)]
     tags = ['spatialcorr_pertuning', 'spatialcorr_pertuningshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
