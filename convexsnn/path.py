@@ -103,7 +103,7 @@ def get_path(dpcs, type, tmax, path_seed=0):
         print(np.max(dp))    
 
     elif type == 'grid':
-        npoints = 200 if dpcs == 1 else 400
+        npoints = 400
         p = compute_meshgrid(1, npoints, dpcs)
         dp = np.zeros_like(p)
         dt = 1
@@ -139,52 +139,31 @@ def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
     num_bins = sqrtnum_bins**2
 
     step, points = mesh(num_bins, dim_pcs)
-    
-    covar = gram(points.T)
-
-    
+        
     eofp = np.ones((dim_e, p.shape[1]))
     np.random.seed(env)
-    if variance == -1:
-        if not flexible:
+    if not flexible: 
+        if variance == -1:
             nu = np.random.uniform(-1,1,(dim_e,1))
             eofp = eofp * nu
         else:
-            vel = 0.25*np.sqrt(dim_e)
-            # abs = np.random.uniform(-vel, vel, (dim_pcs,dim_e))
-            # abs = vel*abs/np.linalg.norm(abs,axis=0)
-            c = np.random.uniform(-1,1,(dim_e,1))
-            # eofp = abs.T @ points + c
-            th = ortho_group.rvs(dim_e)[:,:dim_pcs]
-            eofp = vel*th @ points + c
-    else:
-        for i in np.arange(dim_e): 
-            if not flexible:
-                # np.random.seed(70+i)
-                # canonic = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
-                # canonic = canonic/(2*np.max(np.abs(canonic))) # set it [-0.5,05]
-                # canonic = np.zeros(points.shape[1]) - 0.9
+            for i in np.arange(dim_e): 
                 nu = 2
                 while nu > 1 or nu < -1:
                     nu = np.random.normal(0,variance)
-                # eofp = nu + canonic
                 eofp[i,:] = np.ones(points.shape[1])*nu
+    else:
+        ftype = 'norm'
+        if ftype == 'norm':
+            c = np.random.uniform(-1,1,(dim_e,1))
+            vel = 0.25*np.sqrt(dim_e) if variance == -1 else variance*0.25*np.sqrt(dim_e)
+            th = ortho_group.rvs(dim_e)[:,:dim_pcs] if dim_e > 1 else np.random.choice([1,-1], (1,1))
+            eofp = vel*th @ points + c
         else:
-            # eofp = np.random.uniform(-1,1,size=points.shape[1])
-            # eofp = np.random.multivariate_normal(np.zeros(points.shape[1]),covar)
-            # a = np.random.uniform(-0.5,0.5)
-            # b = np.random.uniform(-0.5,0.5)
-            # c = np.random.uniform(-1,1)
-            # eofp[i,:] = a*points[0,:]+b if dim_pcs == 1 else a*points[0,:] + b*points[1,:] +c
-            # eofp = scipy.stats.norm.cdf(eofp)-0.5
-            # mean = np.random.uniform(-1,1) # [-1, 1]
-            # eofp = eofp - np.mean(eofp) + mean
-            # eofp = np.sin(eofp)
-            # eofp =  eofp/(np.max(np.abs(eofp))) # [-1,1]
-            eofp[i,:] = np.random.multivariate_normal(np.zeros(points.shape[1]),variance*covar)
-            # TODO constrain
+            covar = gram(points.T)
+            for i in np.arange(dim_e): 
+                eofp[i,:] = np.random.multivariate_normal(np.zeros(points.shape[1]),variance*covar)
 
-    # eofp = 5*(eofp - eofp[:,:1])/np.linalg.norm(eofp[:,1]) + eofp[:,:1]
     eofp = (eofp + 1) % 2 - 1
     if dim_pcs == 2: eofp = eofp.reshape((-1, sqrtnum_bins,sqrtnum_bins))
 
