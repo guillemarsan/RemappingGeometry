@@ -212,31 +212,31 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
         ax2.set_title('Var. explained %')
         ax2.set_xlabel('PC')
 
-        if y.shape[0] == 3:
+        cylinder = True
+        if y.shape[0] == 3 or cylinder:
             ax3 = plt.subplot(2, 1, 2, projection='3d')
             for e in np.arange(proj_r.shape[2]):
                 ax3.scatter(y[0,:,e], y[1,:,e], y[2,:,e])
             ax3.set_title('Embedding space y')
             ax3.set_xlim([-1,1])
             ax3.set_ylim([-1,1])
-            ax3.set_zlim([-1,1])
+            if not cylinder: 
+                ax3.set_zlim([-1,1])
             ax3.set_box_aspect([np.ptp(axis) for axis in [ax3.get_xlim(), ax3.get_ylim(), ax3.get_zlim()]])
             
         else:
             ax3 = plt.subplot(2, 2, 3)
             for e in np.arange(proj_r.shape[2]):
                 ax3.scatter(y[0,:,e], y[1,:,e])
-            ax3.set_xlim([-1,1])
-            ax3.set_ylim([-0.1,1])
-            ax3.axis('equal')
+            ax3.set_xlim([-1.1,1.1])
+            ax3.set_ylim([-1.1,1.1])
             ax3.set_title('y(0),y(1)')
 
             ax4 = plt.subplot(2, 2, 4)
             for e in np.arange(proj_r.shape[2]):
                 ax4.scatter(y[2,:,e], y[3,:,e])
-            ax4.set_xlim([-1,1])
-            ax4.set_ylim([-0.1,1])
-            ax4.axis('equal')
+            ax4.set_xlim([-1.1,1.1])
+            ax4.set_ylim([-1.1,1.1])
             ax4.set_title('y(2),y(3)')
             
     
@@ -397,9 +397,9 @@ def prepare_pfs(df, neurons, visualize, labels, active=False):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='PosterFlexiblenn',
+    parser.add_argument("--dir", type=str, default='PosterRecruitment',
                         help="Directory to read and write files")
-    parser.add_argument("--plot", type=str, default='measures',
+    parser.add_argument("--plot", type=str, default='placefields',
                         help = 'Which plot to make')
     
 
@@ -431,12 +431,12 @@ print ("Plotting results...")
 
 if plot == 'placefields':
 
-    visualize = ['arg_dim_bbox', 'arg_env']
+    visualize = ['arg_dim_bbox', 'arg_env', 'arg_current_amp']
     labels = ['d', 'e']
-    params_sweep = [(64, 0), (64, 1), (64, 2)]
+    params_sweep = [(64, 0, 0),(64, 0, -10)]
     tags = ['pfs']
-    neurons = [0, 2, 5, 6, 9, 10, 11, 12, 14]
-    colorsvect = None #[1,1,1,1,1]
+    neurons = [3, 7, 12, 13, 8, 0, 1, 2, 4, 6]
+    colorsvect = None #[1,1,1,1,1]]
 
     df = filter(df, visualize, params_sweep, tags)
     newdf = prepare_pfs(df, neurons, visualize, labels, active=False)
@@ -637,9 +637,9 @@ if plot == 'remapping' or plot == 'nrooms_pertuning':
 
 if plot == 'remapping' or plot == 'pca':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_embedding_sigma', 'arg_encoding']
-    labels = ['d', 'n', 's']
-    params_sweep = [(3,20,0.1,'random')]
+    visualize = ['arg_dim_bbox','arg_nb_neurons']
+    labels = ['d', 'n']
+    params_sweep = [(4,1024)]
     tags = ['var_explained_r', 'pca_proj_r', 'y_trajs']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -653,13 +653,13 @@ if plot == 'remapping' or plot == 'pca':
 
 if plot == 'remapping' or plot == 'remap_vec':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons', 'arg_load_id', 'arg_encoding']
-    labels = ['d', 'n', 'l']
-    params_sweep = [(4,128,0,'parallel')]
+    visualize = ['arg_dim_bbox','arg_nb_neurons']
+    labels = ['d', 'n']
+    params_sweep = [(3,768)]
     tags = ['norm_remap','norm_Dy','norm_Dye','norm_nu']
 
     fdf = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label='arg_encoding', labels= labels, visualize=visualize)
+    newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label='arg_dim_bbox', labels= labels, visualize=visualize)
     
     title = 'Remapping vector norm decompositon'
     axis_labels = ['','Norm'] 

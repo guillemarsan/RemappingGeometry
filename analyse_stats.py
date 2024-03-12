@@ -528,7 +528,7 @@ def analyse_spatialcorr(point, all_pfs):
             if aux is not None:
                 resshuff += aux
                 i += 1
-        return resshuff/i
+        return resshuff/i if i != 0 else None
     
     # Only environments that have a common active neuron
     dirs = all_pfs.shape[2]
@@ -774,10 +774,12 @@ def analyse_coveredarea_perclass(row, point):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='PosterFlexiblenn',
+    parser.add_argument("--dir", type=str, default='PosterRecruitment',
                         help="Directory to read and write files")
     parser.add_argument("--compute", type=str, default='remapping',
                         help = 'Which thing to analyse to make')
+    parser.add_argument("--null", action='store_true', default=True,
+                        help = 'If nullspace remapping or not')
     parser.add_argument("--shuffle", action='store_true', default=False,
                         help="Shuffle the data in some way")
 
@@ -814,7 +816,8 @@ elif compute == 'placecells':
     df = compute_per_simulation(dbase, params, lambdafunc)
 elif compute == 'remapping':
     lambdafunc = lambda x, gb: analyse_remapping(x,gb)
-    df = compute_across(dbase, ['arg_env'], params, lambdafunc)
+    df = compute_across(dbase, ['arg_env'] if not args.null else 
+                        ['arg_tagging_sparse','arg_current_amp','arg_tagged_idx'], params, lambdafunc)
 elif compute == 'recruitment':
     lambdafunc = lambda x, params: analyse_recruitment(x, params)
     df = compute_per_simulation(dbase, params, lambdafunc)

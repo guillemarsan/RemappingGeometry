@@ -18,7 +18,7 @@ import convexsnn.plot as plot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=2,
+    parser.add_argument("--dim_pcs", type=int, default=1,
                         help="Dimensionality of space")
     parser.add_argument("--path_type", type=str, default='grid',
                         help='Type of path the animal does')
@@ -27,9 +27,9 @@ if __name__ == "__main__":
     parser.add_argument('--path_seed',type=int, default=0,
                         help="Random seed for the path in case of random")
     
-    parser.add_argument("--encoding", type=str, default='flexible',
+    parser.add_argument("--encoding", type=str, default='parallel',
                         help='Determines the type of encoder between rotation, parallel and flexible')
-    parser.add_argument("--dim_bbox", type=int, default=32,
+    parser.add_argument("--dim_bbox", type=int, default=4,
                         help="Dimensionality of latent space")
     parser.add_argument('--env', type=int, default=0,
                         help="Environment id")
@@ -43,7 +43,7 @@ if __name__ == "__main__":
                         help="Scale the input by sqrtdbbox") 
     
     
-    parser.add_argument("--nb_neurons", type=int, default=512,
+    parser.add_argument("--nb_neurons", type=int, default=1024,
                         help="Number of neurons")
     parser.add_argument("--model", type=str, default='randclosed-load-polyae',
                         help="Type of model")
@@ -53,7 +53,7 @@ if __name__ == "__main__":
                         help='Determines the type of simulation between integrator (pathint) and one spike (one)')
     parser.add_argument('--conn_seed',type=int, default=0,
                         help="Random seed for the connectivity in case of random")
-    parser.add_argument("--load_id", type=int, default=1,
+    parser.add_argument("--load_id", type=int, default=0,
                         help="Id of the connectivity in case of load")
     parser.add_argument("--model_uninorm",action='store_true', default=False,
                         help="Normalize separate each couple of dimensions") 
@@ -165,11 +165,18 @@ if __name__ == "__main__":
         x = args.input_amp*x
         dx = args.input_amp*dx
 
-    # Noise
-    I, b = get_noise(dbbox, t, G, noise_amp=args.noise_amp, noise_seed=args.noise_seed)
-    
-    # Current manipulation
-    I += get_current(n, t, tagged_idx=args.tagged_idx, current_amp=args.current_amp)
+    if args.simulate != 'minimization':
+        # Noise
+        I, b = get_noise(dbbox, t, G, noise_amp=args.noise_amp, noise_seed=args.noise_seed)
+        
+        # Current manipulation
+        I += get_current(n, t, tagged_idx=args.tagged_idx, current_amp=args.current_amp)
+    else:
+        b = np.zeros_like(x)
+        # Current manipulation
+        mask = np.zeros_like(model.T)
+        mask[args.tagged_idx] = 1
+        model.T = model.T - mask * args.current_amp
 
     # Bias correction for D
     input_amp = np.sqrt(dbbox)*args.input_amp if args.input_scale else args.input_amp
