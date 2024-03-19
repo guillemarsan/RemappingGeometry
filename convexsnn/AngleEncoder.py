@@ -1,42 +1,42 @@
 import numpy as np
 class AngleEncoder():
 
-    def encode(self, g, dg=None):
+    def encode(self, g, dg=None, modules=1):
         
         dim = g.shape[0]
-        
-        # pe to alpha
-        cycles = np.pi # np.pi/2
-        alpha = cycles * (g + 1)
-        if dg is not None: dalpha = cycles * dg
-
-        # alpha to S1
         time_steps = g.shape[1]
-        k = np.zeros((2*dim,time_steps))
-        if dg is not None: dk = np.zeros((2*dim,time_steps))
+        k = np.zeros((2*dim*modules,time_steps))
+        if dg is not None: dk = np.zeros((2*dim*modules,time_steps))
         
         j = 0
-        for i in np.arange(dim):
-            k[j,:] = np.cos(alpha[i,:])
-            k[j+1,:] = np.sin(alpha[i,:])
+        for m in np.arange(modules):
+            # pe to alpha
+            cycles = (3/2)**m*np.pi # np.pi/2
+            alpha = cycles * (g + 1)
+            if dg is not None: dalpha = cycles * dg
 
-            if dg is not None:
-                dk[j,:] = -np.sin(alpha[i,:])*dalpha[i,:]
-                dk[j+1,:] = np.cos(alpha[i,:])*dalpha[i,:]
-            j += 2
-    
+            # alpha to S1            
+            for i in np.arange(dim):
+                k[j,:] = np.cos(alpha[i,:])
+                k[j+1,:] = np.sin(alpha[i,:])
+
+                if dg is not None:
+                    dk[j,:] = -np.sin(alpha[i,:])*dalpha[i,:]
+                    dk[j+1,:] = np.cos(alpha[i,:])*dalpha[i,:]
+                j += 2
+        
         # Normalize
-        k = 1/np.sqrt(dim)*k
-        if dg is not None: dk = 1/np.sqrt(dim)*dk
+        k = 1/np.sqrt(dim*modules)*k
+        if dg is not None: dk = 1/np.sqrt(dim*modules)*dk
 
         if dg is not None:
             return k, dk
         else:
             return k
 
-    def decode(self, s_hat):
+    def decode(self, s_hat, modules=1):
 
-        dim = int(s_hat.shape[0]/2)
+        dim = int(s_hat.shape[0]/(2*modules)) # right now: read from first module TODO combine modules
         time_steps = s_hat.shape[1]
         alpha = np.zeros((dim,time_steps))
 

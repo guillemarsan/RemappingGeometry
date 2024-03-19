@@ -156,7 +156,7 @@ def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
         ftype = 'norm'
         if ftype == 'norm':
             c = np.random.uniform(-1,1,(dim_e,1))
-            vel = 0.25*np.sqrt(dim_e) if variance == -1 else variance*0.25*np.sqrt(dim_e)
+            vel = 0.25*np.sqrt(dim_e) if variance == -1 else variance*0.25*np.sqrt(dim_e) #0.25
             th = ortho_group.rvs(dim_e)[:,:dim_pcs] if dim_e > 1 else np.random.choice([1,-1], (1,1))
             eofp = vel*th @ points + c
         else:

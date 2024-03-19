@@ -18,18 +18,18 @@ import convexsnn.plot as plot
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dim_pcs", type=int, default=1,
+    parser.add_argument("--dim_pcs", type=int, default=2,
                         help="Dimensionality of space")
-    parser.add_argument("--path_type", type=str, default='grid',
+    parser.add_argument("--path_type", type=str, default='usnake',
                         help='Type of path the animal does')
     parser.add_argument('--path_tmax', type=float, default=30.,
                         help="Length of the path in seconds")
     parser.add_argument('--path_seed',type=int, default=0,
                         help="Random seed for the path in case of random")
     
-    parser.add_argument("--encoding", type=str, default='parallel',
+    parser.add_argument("--encoding", type=str, default='gridcells',
                         help='Determines the type of encoder between rotation, parallel and flexible')
-    parser.add_argument("--dim_bbox", type=int, default=4,
+    parser.add_argument("--dim_bbox", type=int, default=8,
                         help="Dimensionality of latent space")
     parser.add_argument('--env', type=int, default=0,
                         help="Environment id")
@@ -43,7 +43,7 @@ if __name__ == "__main__":
                         help="Scale the input by sqrtdbbox") 
     
     
-    parser.add_argument("--nb_neurons", type=int, default=1024,
+    parser.add_argument("--nb_neurons", type=int, default=64,
                         help="Number of neurons")
     parser.add_argument("--model", type=str, default='randclosed-load-polyae',
                         help="Type of model")
@@ -55,10 +55,8 @@ if __name__ == "__main__":
                         help="Random seed for the connectivity in case of random")
     parser.add_argument("--load_id", type=int, default=0,
                         help="Id of the connectivity in case of load")
-    parser.add_argument("--model_uninorm",action='store_true', default=False,
-                        help="Normalize separate each couple of dimensions") 
-    parser.add_argument("--model_sepnorm",action='store_true', default=False,
-                        help="Normalize separate the first 2*dpcs dimensions. Only for parallel, flexible") 
+    parser.add_argument("--model_conj",type=str, default='CM',
+                        help="Normalize separate each couple of dimensions: M, C, CM, CC") 
     parser.add_argument("--decoder_amp", type=float, default=1,
                         help="Amplitude of decoder matrix D")
     parser.add_argument("--thresh_amp", type=float, default=1,
@@ -103,52 +101,55 @@ if __name__ == "__main__":
     n = args.nb_neurons
 
     print('Loading model...')
-    sepnorm = None if not args.model_sepnorm else args.dim_pcs*2
+    sepnorm = None if len(args.model_conj) == 1 else args.dim_pcs*2
     model, D, G = get_model(dbbox ,n, dbbox,connectivity=args.model, decod_amp=args.decoder_amp, 
                     thresh_amp=args.thresh_amp, load_id=args.load_id, conn_seed=args.conn_seed, 
-                    lognor_seed=args.lognor_seed, lognor_sigma=args.lognor_sigma, rnn=args.rnn, uninorm=args.model_uninorm,
+                    lognor_seed=args.lognor_seed, lognor_sigma=args.lognor_sigma, rnn=args.rnn, conj=args.model_conj,
                     sepnorm=sepnorm)
 
+    ## CONSTRUCTION OF P
     # Load gamma path
     print('Loading path...')
     p, dp, t, dt, time_steps = get_path(dpcs=args.dim_pcs, type=args.path_type, tmax=args.path_tmax, path_seed=args.path_seed) 
 
     results = dict(datetime=timestr, basepath=basepath, args=vars(args))
     
-    if args.encoding == 'rotation':
+    ## CONSTRUCTION OF P,Q
+    if args.encoding in {'parallel', 'flexible', 'sensory'}:
+        # Also environment variables
+        dim_e = int((dbbox - 2*args.dim_pcs)/2) if args.encoding in {'parallel', 'flexible'} else int(dbbox/2)
+        e, de, eofp = get_pathe(p, dim_e, args.env, dt, flexible=args.encoding in {'flexible', 'sensory'}, variance=args.embedding_sigma)
+
+        if args.encoding in {'parallel', 'flexible'}:
+            g = np.vstack([p,e])
+            dg = np.vstack([dp,de])
+        else: 
+            g = e
+            dg = de
+    else:
         # Only position variables
         g = p
         dg = dp
 
-        # Angle encoding to semicircles
-        print('Encoding input...')
-        Encoder = AngleEncoder()
-        k, dk = Encoder.encode(g, dg)
-        dinput = k.shape[0]
+    ## CONSTRUCTION OF Z
+    # Angle encoding to semicircles
+    print('Encoding input...')
+    modules = int(dbbox/(2*args.dim_pcs)) if args.encoding == 'gridcells' else 1
+    Encoder = AngleEncoder()
+    k, dk = Encoder.encode(g, dg, modules=modules)
+    dinput = k.shape[0]
 
-        # Construction of Theta(e)
-        print('Embedding input...')
-        Theta = get_embedding(dbbox, dinput=dinput, env=args.env, variance=args.embedding_sigma)  
-        
-        # Embedd
-        x = Theta @ k
-        dx = Theta @ dk
+    ## CONSTRUCTION OF Y
+    # Construction of Theta(e)
+    print('Embedding input...')
+    if args.encoding in {'rotation', 'gridcells'}:
+        Theta = get_embedding(dbbox, dinput=dinput, env=args.env, variance=args.embedding_sigma, sphere=args.encoding=='rotation') 
     else:
-        # Also environment variables
-        dim_e = int((dbbox - 2*args.dim_pcs)/2)
-        e, de, eofp = get_pathe(p, dim_e, args.env, dt, flexible=args.encoding=='flexible', variance=args.embedding_sigma)
-        g = np.vstack([p,e])
-        dg = np.vstack([dp,de])
-
-        # Angle encoding to semicircles
-        print('Encoding input...')
-        Encoder = AngleEncoder()
-        k, dk = Encoder.encode(g, dg)
-        dinput = k.shape[0]
+        Theta = np.eye(dinput)
     
-        # Embedd (Theta = Id)
-        x = k
-        dx = dk
+    # Embedd
+    x = Theta @ k
+    dx = Theta @ dk
 
     # Scale of input
     if args.input_sepnorm:
@@ -165,6 +166,7 @@ if __name__ == "__main__":
         x = args.input_amp*x
         dx = args.input_amp*dx
 
+    ## NOISE AND CURRENT MANIPULATION
     if args.simulate != 'minimization':
         # Noise
         I, b = get_noise(dbbox, t, G, noise_amp=args.noise_amp, noise_seed=args.noise_seed)
@@ -178,6 +180,7 @@ if __name__ == "__main__":
         mask[args.tagged_idx] = 1
         model.T = model.T - mask * args.current_amp
 
+    ## SIMULATION
     # Bias correction for D
     input_amp = np.sqrt(dbbox)*args.input_amp if args.input_scale else args.input_amp
     bias_corr = input_amp/(input_amp+0.5*(args.decoder_amp - args.thresh_amp))
@@ -206,20 +209,20 @@ if __name__ == "__main__":
         V, s, r = model.simulate(c, I, V0=V0, r0=r0, dt=dt, time_steps=time_steps)
         x_hat = D @ r - b / model.lamb
 
-
+    ## DECODING
     # Decode
     x_hat = bias_corr*x_hat
-    k_hat = Theta.T @ x_hat if args.encoding == 'rotation' else x_hat
+    k_hat = Theta.T @ x_hat if args.encoding in {'rotation', 'gridcells'} else x_hat
     k_hat = k_hat/np.sqrt(dbbox) if args.input_scale else k_hat/args.input_amp
-    g_hat = Encoder.decode(k_hat)
+    g_hat = Encoder.decode(k_hat, modules=modules)
 
-
+    ## RESULTS
     # Save results 
     print('Saving results...')
     results['x_error'] = np.mean(np.linalg.norm(x_hat - x, axis=0))
     results['k_error'] = np.mean(np.linalg.norm(k_hat - k, axis=0))
     results['g_error'] = np.mean(np.linalg.norm(g_hat - g, axis=0))
-    if args.encoding != 'rotation':
+    if args.encoding in {'parallel', 'flexible'}:
         results['p_error'] = np.mean(np.linalg.norm(g_hat[:args.dim_pcs,:] - g[:args.dim_pcs,:], axis=0))
         results['e_error'] = np.mean(np.linalg.norm(g_hat[args.dim_pcs:,:] - g[args.dim_pcs:,:], axis=0))
 
@@ -275,7 +278,7 @@ if __name__ == "__main__":
     # Plot
     if args.plot:
 
-        if args.encoding != 'rotation':
+        if args.encoding in {'parallel', 'flexible', 'sensory'}:
             print('Generating (p,e) plot...')
             plot.plot_pe(p, eofp, e, t, basepath)
 
