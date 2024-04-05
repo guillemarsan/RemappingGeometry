@@ -148,8 +148,6 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0,
             D[[p,p+1],:] = 1/np.sqrt(out/2) * D[[p,p+1],:]/np.linalg.norm(D[[p,p+1],:],axis=0)
             p += 2
     if len(conj) == 2:
-        D[:sepnorm,:] = 1/np.sqrt(2) * D[:sepnorm,:]/np.linalg.norm(D[:sepnorm,:],axis=0)
-        D[sepnorm:,:] = 1/np.sqrt(2) * D[sepnorm:,:]/np.linalg.norm(D[sepnorm:,:],axis=0)
 
         if conj == 'CC':
             p = 0
@@ -159,9 +157,11 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0,
         elif conj == 'CM':
             p = 0
             for _ in np.arange(sepnorm/2):
-                D[[p,p+1],:] = 1/np.sqrt(sepnorm) * D[[p,p+1],:]/np.linalg.norm(D[[p,p+1],:],axis=0)
+                D[[p,p+1],:] = 1/np.sqrt(sepnorm/2) * D[[p,p+1],:]/np.linalg.norm(D[[p,p+1],:],axis=0)
                 p += 2
-        
+
+        D[:sepnorm,:] = 1/np.sqrt(2) * D[:sepnorm,:]/np.linalg.norm(D[:sepnorm,:],axis=0)
+        D[sepnorm:,:] = 1/np.sqrt(2) * D[sepnorm:,:]/np.linalg.norm(D[sepnorm:,:],axis=0)
         
 
     if connectivity != 'custom': 
