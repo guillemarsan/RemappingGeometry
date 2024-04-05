@@ -493,7 +493,7 @@ def plot_pe(p, eofp, e, t, basepath):
     ax1 = plt.subplot(1, 2, 1)
     dim_pcs = p.shape[0]
     if dim_pcs == 1:
-        ax1.plot(np.linspace(-1,1,eofp.shape[0]), eofp)
+        ax1.plot(np.linspace(-1,1,eofp.shape[1]), eofp.T)
         ax1.set_ylim([-1,1])
         plt.title('e%i(p)' % (e.shape[0]-1))
     else:
