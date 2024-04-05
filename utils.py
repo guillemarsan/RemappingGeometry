@@ -64,7 +64,7 @@ def compute_pf(ratemap, bins):
     structure = np.ones((3, 3), dtype=int)
 
     
-    labeled, ncomponents = ndimage.measurements.label(smoothed_cutoff>0, structure)
+    labeled, ncomponents = ndimage.label(smoothed_cutoff>0, structure)
     
 
     for com in np.arange(ncomponents):
