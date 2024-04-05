@@ -9,7 +9,9 @@ class AngleEncoder():
         if dg is not None: dk = np.zeros((2*dim*modules,time_steps))
         
         j = 0
-        for m in np.arange(modules):
+        array = np.arange(-np.floor(modules/2), np.floor(modules/2)+1)
+        if modules % 2 == 0: array = array[1:]
+        for m in array:
             # pe to alpha
             cycles = (3/2)**m*np.pi # np.pi/2
             alpha = cycles * (g + 1)
@@ -36,16 +38,12 @@ class AngleEncoder():
 
     def decode(self, s_hat, modules=1):
 
-        dim = int(s_hat.shape[0]/(2*modules)) # right now: read from first module TODO combine modules
+        dim = int(s_hat.shape[0]/(2*modules)) 
         time_steps = s_hat.shape[1]
         alpha = np.zeros((dim,time_steps))
 
         # S1 to alpha
-        j = 0
-        for i in np.arange(dim):
-            alpha[i,:] = np.arctan2(s_hat[j+1,:],s_hat[j,:])
-            alpha[i,alpha[i,:] < 0] += 2*np.pi
-            j += 2
+        alpha = self.intrinsic(s_hat[:2*dim+1,:]) # right now: read from first module TODO combine modules
 
         # alpha to pe
         cycles = np.pi #np.pi/2
@@ -53,6 +51,17 @@ class AngleEncoder():
 
         return g_hat
     
+    def intrinsic(self, s_hat):
+
+        dim = int(s_hat.shape[0]/2)
+        alpha = np.zeros((int(s_hat.shape[0]/2),s_hat.shape[1]))
+        j = 0
+        for i in np.arange(dim):
+            alpha[i,:] = np.arctan2(s_hat[j+1,:],s_hat[j,:])
+            alpha[i, alpha[i,:] < 0] += 2*np.pi
+            j += 2
+        
+        return alpha
 
 ############ OLD ENCODERS TRIED ######################
 class ProjectionCod():
