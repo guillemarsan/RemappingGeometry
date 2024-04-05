@@ -3,7 +3,7 @@ import scipy.signal, scipy.ndimage
 import numpy as np
 import time
 from utils import compute_meshgrid
-from scipy.stats import ortho_group
+from scipy.stats import ortho_group, multivariate_normal
 
 
 
@@ -112,9 +112,9 @@ def get_path(dpcs, type, tmax, path_seed=0):
 
     return p, dp, t, dt, time_steps
 
-def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
+def get_pathe(p, dim_e, env, dt, variability='l', variance=-1):
 
-    def gram(x, sigma=5, l=2):
+    def gram(x, sigma=0.25, l=0.5):
         condensed_dist = scipy.spatial.distance.pdist(x)
         dist = scipy.spatial.distance.squareform(condensed_dist)
         gram = sigma**2 * np.exp(-1 * (dist ** 2) / (2*(l**2)))
@@ -142,7 +142,7 @@ def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
         
     eofp = np.ones((dim_e, p.shape[1]))
     np.random.seed(env)
-    if not flexible: 
+    if variability == 'l': 
         if variance == -1:
             nu = np.random.uniform(-1,1,(dim_e,1))
             eofp = eofp * nu
@@ -152,18 +152,26 @@ def get_pathe(p, dim_e, env, dt, flexible=False, variance=-1):
                 while nu > 1 or nu < -1:
                     nu = np.random.normal(0,variance)
                 eofp[i,:] = np.ones(points.shape[1])*nu
+    elif variability == 'm':
+        covar = gram(points.T)
+        var = variance if variance != -1 else 1
+        nu = np.random.uniform(-1,1,(dim_e,1))
+        for i in np.arange(dim_e): 
+            eofp[i,:] = np.random.multivariate_normal(np.zeros(points.shape[1]),var*covar)
+        eofp = eofp + nu
+    elif variability == 'h':
+        c = np.random.uniform(-1,1,(dim_e,1))
+        vel = 0.25*np.sqrt(dim_e) if variance == -1 else variance*0.25*np.sqrt(dim_e) #0.25
+        th = ortho_group.rvs(dim_e)[:,:dim_pcs] if dim_e > 1 else np.random.choice([1,-1], (1,1))
+        eofp = vel*th @ points + c
     else:
-        ftype = 'norm'
-        if ftype == 'norm':
-            c = np.random.uniform(-1,1,(dim_e,1))
-            vel = 0.25*np.sqrt(dim_e) if variance == -1 else variance*0.25*np.sqrt(dim_e) #0.25
-            th = ortho_group.rvs(dim_e)[:,:dim_pcs] if dim_e > 1 else np.random.choice([1,-1], (1,1))
-            eofp = vel*th @ points + c
-        else:
-            covar = gram(points.T)
-            for i in np.arange(dim_e): 
-                eofp[i,:] = np.random.multivariate_normal(np.zeros(points.shape[1]),variance*covar)
-
+        for i in np.arange(dim_e): 
+            loc = np.random.uniform(-1,1,dim_pcs) if variance == -1 else \
+                  np.random.multivariate_normal(np.zeros(dim_pcs),np.eye(dim_pcs)*variance)
+            var = multivariate_normal(loc, np.eye(dim_pcs)*0.01)
+            eofp[i,:] = np.array([var.pdf(points[:,i]) for i in np.arange(p.shape[1])])
+            eofp[i,:] = eofp/np.max(eofp) - 1
+  
     eofp = (eofp + 1) % 2 - 1
     if dim_pcs == 2: eofp = eofp.reshape((-1, sqrtnum_bins,sqrtnum_bins))
 
