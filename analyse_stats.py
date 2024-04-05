@@ -6,6 +6,7 @@ import time
 import pandas as pd
 from convexsnn.path import get_path
 from convexsnn.network import get_model
+from convexsnn.AngleEncoder import AngleEncoder
 
 ##################### STANDARDS ###################################
 
@@ -62,17 +63,45 @@ def read_pfs(set, neu, b, dirs, ratemaps=False):
 
     return all_pfs
 
+def read_trajs(set):
+
+    i = 0
+    all = [[],[],[],[]]
+    for type in ['x', 'xhat', 'g', 'ghat']:
+        filelist = set[type]
+        for file in filelist:
+            with open(file) as res_file:
+                a = np.genfromtxt(res_file)
+            all[i].append(a)
+        all[i] = np.stack(all[i], axis=2)
+        i += 1
+
+    return all
+
+
 def read_D(point, neu, dbbox):
 
     D = np.zeros((neu, dbbox))
-    sepnorm = None if not point['arg_model_sepnorm'] else point['arg_dim_pcs']*2
+    sepnorm = None if len(point['arg_model_conj']) == 1 else point['arg_dim_pcs']*2
     _, D, _ = get_model(dbbox ,neu, dbbox, connectivity=point['arg_model'], decod_amp=point['arg_decoder_amp'], 
                     load_id=point['arg_load_id'], conn_seed=point['arg_conn_seed'], lognor_seed=point['arg_lognor_seed'], 
-                    lognor_sigma=point['arg_lognor_sigma'], rnn=point['arg_rnn'], uninorm=point['arg_model_uninorm'],
+                    lognor_sigma=point['arg_lognor_sigma'], rnn=point['arg_rnn'], conj=point['arg_model_conj'],
                     sepnorm=sepnorm)
     
     return D
 
+def read_inputs(set):
+
+    xs = []
+    i = 0
+    filelist = set['x']
+    for file in filelist:
+        with open(file) as res_file:
+            x = np.genfromtxt(res_file)
+        xs.append(x) 
+        i += 1
+    xs = np.stack(xs,axis=2)
+    return xs
 
 ##################### COMPUTES ####################################
 
@@ -177,6 +206,12 @@ def analyse_pfs_r(point):
     np.savetxt(pfs_name, placefields, fmt='%.3e')
     point['ratemaps'] = ratemaps_name
     point['pfs'] = pfs_name
+    if point['arg_save_input']: 
+        point['x'] = "{0}-x.csv".format(id)
+        point['xhat'] = "{0}-xhat.csv".format(id)
+        point['g'] = "{0}-g.csv".format(id)
+        point['ghat'] = "{0}-ghat.csv".format(id)
+    
 
     return point
 
@@ -239,6 +274,7 @@ def analyse_ratemaps_pfs_s(point):
     np.savetxt(pfs_name, placefields, fmt='%.3e')
     point['ratemaps'] = ratemaps_name
     point['pfs'] = pfs_name
+    if point['arg_save_input']: point['x'] = "{0}-x.csv".format(id)
 
     return point
 
@@ -342,7 +378,10 @@ def analyse_remapping(set, params):
     analyse_combine_stats(set, point)
 
     if point['arg_dim_pcs'] == 1:
-        analyse_pca(point, all_ratemaps, D)
+        analyse_pca(point, all_ratemaps)
+        all_trajs = read_trajs(set)
+        analyse_store_trajs(point, all_trajs)
+        analyse_store_D(point, D)
     
     analyse_remapping_vector(point, all_ratemaps, D)
     analyse_nrooms(set, point)
@@ -380,7 +419,7 @@ def analyse_combine_stats(set,point):
         meanperpfsizes[i] = set.iloc[i]['meanperpfsize']
         perpcs[i] = set.iloc[i]['perpcs']
         dimg_errors[i] = set.iloc[i]['g_error']/np.sqrt(dpcs)
-        if set.iloc[0]['arg_encoding'] != 'rotation': 
+        if set.iloc[0]['arg_encoding'] in {'flexible', 'parallel', 'flexibleGP', 'flexibler'}: 
             dimp_errors[i] = set.iloc[i]['p_error']/np.sqrt(dpcs)
             dime_errors[i] = set.iloc[i]['e_error']/np.sqrt(denvs)
 
@@ -390,7 +429,7 @@ def analyse_combine_stats(set,point):
     point['dimp_errors'] = tostore(dimp_errors)
     point['dime_errors'] = tostore(dime_errors)
 
-def analyse_pca(point, all_ratemaps, D):
+def analyse_pca(point, all_ratemaps):
 
     def pca(x):
         centered = x - np.mean(x,axis=0)
@@ -412,18 +451,31 @@ def analyse_pca(point, all_ratemaps, D):
     pca_proj_r = np.zeros((3,time_steps,envs))
     for i in np.arange(envs):
         pca_proj_r[:,:,i] = aux[i*time_steps:(i+1)*time_steps,:].T
-
-    y = (all_ratemaps.T @ D.T).T # D @ all_ratemaps
     
     point['var_explained_r'] = tostore(varexp_r)
     point['pca_proj_r'] = tostore(pca_proj_r)
-    point['y_trajs'] = tostore(y)
+
+def analyse_store_D(point, D):
+    point['D'] = tostore(D)
+
+def analyse_store_trajs(point, all_trajs):
+
+    point['x_trajs'] = tostore(all_trajs[0])
+    point['xhat_trajs'] = tostore(all_trajs[1])
+    point['g_trajs'] = tostore(all_trajs[2])
+    point['ghat_trajs'] = tostore(all_trajs[3])
 
 def analyse_remapping_vector(point, all_ratemaps, D):
 
     dirs = all_ratemaps.shape[2]
-    es = point['arg_encoding'] in {'flexible', 'parallel'}
-    if es: edims = point['arg_dim_pcs']*2
+    ps = point['arg_encoding'] not in {'sensory'}
+    es = False
+    if point['arg_encoding'] in {'flexible', 'flexibleGP', 'flexibler', 'parallel'}: 
+        es = True
+        edims = point['arg_dim_pcs']*2
+    elif point['arg_encoding'] in {'sensory', 'sensoryGP'}:
+        es = True
+        edims = 0
     DR = np.linalg.pinv(D)
 
     num_pairs = int(dirs*(dirs-1)/2) # Gauss formula
@@ -438,7 +490,7 @@ def analyse_remapping_vector(point, all_ratemaps, D):
             remap_vec = all_ratemaps[:,:,dir_idx] - all_ratemaps[:,:,dir_idx2]
             norm_remap[pair_idx] = np.linalg.norm(remap_vec)
             dy = D @ remap_vec
-            norm_Dy[pair_idx] = np.linalg.norm(DR @ dy) if not es else np.linalg.norm(DR[:,:edims] @ dy[:edims,:])
+            if ps: norm_Dy[pair_idx] = np.linalg.norm(DR @ dy) if not es else np.linalg.norm(DR[:,:edims] @ dy[:edims,:])
             if es: norm_Dye[pair_idx] = np.linalg.norm(DR[:,edims:] @ dy[edims:,:])
             dnu = remap_vec - DR @ dy
             norm_nu[pair_idx] = np.linalg.norm(dnu)
@@ -774,11 +826,13 @@ def analyse_coveredarea_perclass(row, point):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='PosterRecruitment',
+    parser.add_argument("--dir", type=str, default='gridcellsd1',
                         help="Directory to read and write files")
+    parser.add_argument("--dir_loc", type=str, default='./data/v1',
+                        help="Location of the directory" )
     parser.add_argument("--compute", type=str, default='remapping',
                         help = 'Which thing to analyse to make')
-    parser.add_argument("--null", action='store_true', default=True,
+    parser.add_argument("--null", action='store_true', default=False,
                         help = 'If nullspace remapping or not')
     parser.add_argument("--shuffle", action='store_true', default=False,
                         help="Shuffle the data in some way")
@@ -789,7 +843,7 @@ compute = args.compute
 shuffle = args.shuffle
 
 timestr = time.strftime("%Y%m%d-%H%M%S")
-basepath = './data/' + args.dir + '/'
+basepath = args.dir_loc + '/' + args.dir + '/'
 if compute in {'ratemaps_pfs', 'classes'}: 
     filename = basepath + timestr + '-' + args.dir + '-database_df.csv'
 else:

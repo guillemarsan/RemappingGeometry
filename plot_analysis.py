@@ -6,9 +6,12 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.stats.stats import pearsonr
+from scipy import ndimage
 import numpy as np
 import time
 
+from scipy.spatial import ConvexHull
+from convexsnn.AngleEncoder import AngleEncoder
 from convexsnn.plot import plot_scatterplot, plot_violinplot, plot_displot, plot_errorplot_cond
 
 
@@ -24,6 +27,15 @@ def pearson(x,y,i):
     samples = np.linspace(np.min(x)-0.01,np.max(x)+0.01,100)
     pyhat = coeffs[1] + coeffs[0]*samples
     plt.plot(samples,pyhat,color=c[i])
+
+def compute_mesh(D):
+    x, y = np.meshgrid(np.linspace(-1, 1, 50), np.linspace(-1, 1, 50))
+    mesh = np.vstack([x.ravel(), y.ravel()])
+    Encoder = AngleEncoder()
+    kgrid = Encoder.encode(mesh)
+    rates = D.T @ kgrid
+    argmaxs = np.argmax(rates, axis=0)
+    return mesh, argmaxs
 
 def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormalized=False, equal=False, flipxaxis=False, colorsvect=None):
 
@@ -151,7 +163,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
 
         if ynormalized: plt.xlim(0,1.1)
 
-    elif ptype == 'pfs':
+    elif ptype == 'pfs2':
 
         c = plt.rcParams['axes.prop_cycle'].by_key()['color']
         if colorsvect is not None: 
@@ -180,7 +192,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
 
                 pf = pfs[cell,:]
                 sqrtb = int(np.sqrt(pfs.shape[1]))
-                pf = pf.reshape((sqrtb,sqrtb))
+                pf = pf.reshape((sqrtb,sqrtb)).T
                 alphas = pf/np.max(pf) if np.max(pf) > 0 else 0
                 im = axsub.imshow(pf, alpha=alphas, cmap=cmap, norm=norm, extent=[-1,1,-1,1])
                 if np.max(pf)>0:
@@ -188,59 +200,142 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
                     ti += 1
             i += 1
 
-        if colorsvect is None:
-            patches = [matplotlib.patches.Patch(color=c[i], label='N%i' % n) for i,n in enumerate(neurons) ]
-        else:
-            patches = [matplotlib.patches.Patch(color=c[colorgroups[i]], label='N%i' % n) for i,n in enumerate(neurons) ]
-        plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. , prop={'size': 6})
+        if num_neurons < 20:
+            if colorsvect is None:
+                patches = [matplotlib.patches.Patch(color=c[i % 10], label='N%i' % n) for i,n in enumerate(neurons) ]
+            else:
+                patches = [matplotlib.patches.Patch(color=c[colorgroups[i]], label='N%i' % n) for i,n in enumerate(neurons) ]
+            plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. , prop={'size': 6})
+       
+    elif ptype == 'pfs1':
+
+        c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        if colorsvect is not None: 
+            colorgroups = np.concatenate([np.full(count, i) for i, count in enumerate(colorsvect)])
+        cases = len(data)
+        neurons = data.iloc[0]['neurons']
+        num_neurons = len(neurons)
+
+        i = 1
+        for _, point in data.iterrows():
+            pfs = point['pfs']
+
+            axsub = plt.subplot(cases, 1, i)
+            axsub.set_title(point['legend'], fontsize=7)
+            for cell in np.arange(num_neurons):
+                pf = pfs[cell,:]
+                axsub.plot(pf, color=c[cell % 10] if colorsvect is None else c[colorgroups[cell % 10]])
+            i += 1
+        
+        if num_neurons < 20:
+            if colorsvect is None:
+                patches = [matplotlib.patches.Patch(color=c[i % 10], label='N%i' % n) for i,n in enumerate(neurons) ]
+            else:
+                patches = [matplotlib.patches.Patch(color=c[colorgroups[i]], label='N%i' % n) for i,n in enumerate(neurons) ]
+            plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. , prop={'size': 6})
 
     elif ptype == 'pca':
 
+        c = plt.rcParams['axes.prop_cycle'].by_key()['color']
         plt.figure(figsize=(10,10))
         point = data.iloc[0]
         var_r = point['var_r']
         proj_r = point['proj_r']
-        y = point['y_trajs']
 
-        ax1 = plt.subplot(2, 2, 1, projection='3d')
+        ax1 = plt.subplot(1, 2, 1, projection='3d')
         for e in np.arange(proj_r.shape[2]):
             ax1.scatter(proj_r[0,:,e], proj_r[1,:,e], proj_r[2,:,e])
         ax1.set_title('PCA of r')
 
-        ax2 = plt.subplot(2, 2, 2)
+        ax2 = plt.subplot(1, 2, 2)
         ax2.plot(np.arange(var_r.shape[0]), var_r)
         ax2.set_title('Var. explained %')
         ax2.set_xlabel('PC')
 
+    elif ptype == 'vis':
+
+        c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        plt.figure(figsize=(10,10))
+        point = data.iloc[0]
+        x = point['x_trajs']
+        xhat = point['xhat_trajs']
+        g = point['g_trajs']
+        ghat = point['ghat_trajs']
+
         cylinder = True
-        if y.shape[0] == 3 or cylinder:
-            ax3 = plt.subplot(2, 1, 2, projection='3d')
-            for e in np.arange(proj_r.shape[2]):
-                ax3.scatter(y[0,:,e], y[1,:,e], y[2,:,e])
+        hat = True
+        if x.shape[0] == 3 or cylinder:
+            ax3 = plt.subplot(1, 2, 1, projection='3d')
+            for e in np.arange(x.shape[2]):
+                ax3.plot(x[0,:,e], x[1,:,e], x[2,:,e])
+                ax3.scatter(x[0,0,e], x[1,0,e], x[2,0,e], color=c[e], s=150)
+                if hat: ax3.plot(xhat[0,:,e], xhat[1,:,e], xhat[2,:,e], color = c[e], alpha=0.5)
             ax3.set_title('Embedding space y')
-            ax3.set_xlim([-1,1])
-            ax3.set_ylim([-1,1])
+            ax3.set_xlim([-np.sqrt(2),np.sqrt(2)])
+            ax3.set_ylim([-np.sqrt(2),np.sqrt(2)])
             if not cylinder: 
                 ax3.set_zlim([-1,1])
             ax3.set_box_aspect([np.ptp(axis) for axis in [ax3.get_xlim(), ax3.get_ylim(), ax3.get_zlim()]])
-            
         else:
-            ax3 = plt.subplot(2, 2, 3)
+            ax3a = plt.subplot(2, 2, 1)
             for e in np.arange(proj_r.shape[2]):
-                ax3.scatter(y[0,:,e], y[1,:,e])
-            ax3.set_xlim([-1.1,1.1])
-            ax3.set_ylim([-1.1,1.1])
-            ax3.set_title('y(0),y(1)')
+                ax3a.plot(x[0,:,e], x[1,:,e])
+                if hat: ax3a.plot(xhat[0,:,e], xhat[1,:,e])
+            ax3a.set_xlim([-1.1,1.1])
+            ax3a.set_ylim([-1.1,1.1])
+            ax3a.set_title('y(0),y(1)')
 
-            ax4 = plt.subplot(2, 2, 4)
+            ax3b = plt.subplot(2, 2, 2)
             for e in np.arange(proj_r.shape[2]):
-                ax4.scatter(y[2,:,e], y[3,:,e])
-            ax4.set_xlim([-1.1,1.1])
-            ax4.set_ylim([-1.1,1.1])
-            ax4.set_title('y(2),y(3)')
-            
+                ax3b.scatter(x[2,:,e], x[3,:,e])
+                if hat: ax3a.plot(xhat[2,:,e], xhat[3,:,e])
+            ax3b.set_xlim([-1.1,1.1])
+            ax3b.set_ylim([-1.1,1.1])
+            ax3b.set_title('y(2),y(3)')      
+
+        fields = True
+        if fields:
+            D = point['D']
+            mesh, argmax = compute_mesh(D)
+
+        ax4 = plt.subplot(1, 2, 2)
+        if fields:
+            for i in np.arange(D.shape[1]):
+                meshi = mesh.copy()
+                meshi[:, argmax != i] = 0
+                dims = int(np.sqrt(meshi.shape[1]))
+                map2d = np.ones((meshi.shape[1]))
+                map2d[np.argwhere(argmax != i)] = 0
+                map2d = map2d.reshape((dims,dims))
+                structure = np.ones((3, 3), dtype=int)
+
+                labeled, ncomponents = ndimage.label(map2d, structure)
+                labeled = labeled.reshape(-1)
+                for com in np.arange(ncomponents) + 1:
+                    com_lab = np.argwhere(labeled == com)[:,0]
+                    if com_lab.shape[0] > 2:
+                        pointsi = meshi[:, com_lab]
+                        if len(np.unique(pointsi[0,:])) > 1 and len(np.unique(pointsi[1,:])) > 1:
+                            hullni = ConvexHull(pointsi.T)
+                            ax4.fill(pointsi[0,hullni.vertices], pointsi[1,hullni.vertices], alpha=0.5, color=c[i%10], lw=0)
+
+        for e in np.arange(g.shape[2]):
+            disc_idx = np.where(np.linalg.norm(np.diff(g[:,:,e]),axis=0) > 0.5)[0]+1
+            disc_g = np.hsplit(g[:,:,e], disc_idx)
+            for g_seg in disc_g:
+                ax4.plot(g_seg[0,:], g_seg[1,:], color=c[e])
+            ax4.scatter(g[0,0,e], g[1,0,e], color=c[e])
+            if hat:
+                disc_idx = np.where(np.linalg.norm(np.diff(ghat[:,:,e]),axis=0) > 0.5)[0]+1
+                disc_ghat = np.hsplit(ghat[:,:,e], disc_idx)
+                for ghat_seg in disc_ghat:
+                    ax4.plot(ghat_seg[0,:], ghat_seg[1,:], color=c[e], alpha=0.5)
+        ax4.set_title('Instrinsic manifold')
+        ax4.set_xlim([-1,1])
+        ax4.set_ylim([-1,1])
+        ax4.set_aspect('equal')  
     
-    if ptype not in {'pfs','pca'}:
+    if ptype not in {'pfs2','pfs1','pca', 'vis'}:
         plt.title(title, fontsize=10)
         plt.xlabel(axis_labels[0], fontsize=10)
         plt.ylabel(axis_labels[1], fontsize=10)
@@ -362,23 +457,32 @@ def prepare_pfs(df, neurons, visualize, labels, active=False):
     # Read the pfs
     newdf = pd.DataFrame([])
     i = 0
+    all_pfs = []
+    if active: df = df.iloc[:2]
     for _, row in df.iterrows():
-        newpoint = row[visualize]
         with open(row['pfs']) as res_file:
             t0 = time.time()
             pfs = np.genfromtxt(res_file)
             t1 = time.time()
             print(t1-t0)
-        if not active:
-            newpoint['pfs'] = pfs[neurons, :]
-            newpoint['neurons'] = neurons
-        elif i == 0:
-            active_cells = np.where(np.any(pfs,axis=1))[0]
-            newpoint['pfs'] = pfs[active_cells[:neurons], :]
-            newpoint['neurons'] = active_cells[:neurons]
-        else:
-            newpoint['pfs'] = pfs[active_cells[:neurons], :]
-            newpoint['neurons'] = active_cells[:neurons]
+        all_pfs.append(pfs)
+
+    all_pfs = np.array(all_pfs)
+    if not active:
+        array_n = neurons
+    else:
+        array_n = []
+        active1 = np.any(all_pfs[0,:,:], axis=1)
+        active2 = np.any(all_pfs[1,:,:], axis=1)
+        array_n.append(np.argwhere(active1 * active2)[:6][:,0][:])
+        array_n.append(np.argwhere(active1 * ~active2)[:2][:,0])
+        array_n.append(np.argwhere(active2 * ~active1)[:2][:,0])
+        array_n = np.hstack(array_n)
+
+    for i in range(all_pfs.shape[0]):
+        newpoint = row[visualize]
+        newpoint['pfs'] = all_pfs[i, array_n, :]
+        newpoint['neurons'] = array_n
 
         legend = ''
         j = 0
@@ -389,7 +493,6 @@ def prepare_pfs(df, neurons, visualize, labels, active=False):
         newpoint['legend'] = legend
 
         newdf = pd.concat([newdf, pd.DataFrame([newpoint])])
-        i += 1
 
     return newdf
 
@@ -397,9 +500,11 @@ def prepare_pfs(df, neurons, visualize, labels, active=False):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='PosterRecruitment',
+    parser.add_argument("--dir", type=str, default='gridcellsd1M',
                         help="Directory to read and write files")
-    parser.add_argument("--plot", type=str, default='placefields',
+    parser.add_argument("--dir_loc", type=str, default='./data/v1',
+                        help="Location of the directory" )
+    parser.add_argument("--plot", type=str, default='vis',
                         help = 'Which plot to make')
     
 
@@ -408,7 +513,7 @@ if __name__ == "__main__":
 plot = args.plot
 
 timestr = time.strftime("%Y%m%d-%H%M%S")
-basepath = './data/' + args.dir + '/'
+basepath = args.dir_loc + '/' + args.dir + '/'
 name = basepath +  timestr + '-' + args.dir
     
 print("Loading results...")
@@ -419,7 +524,7 @@ if plot in {'placefields'}:
 elif plot in {'spatialinfo'}:
     df = load_dataframe('placecells', basepath)
 elif plot in {'remapping','nrooms', 'measures', 'variance_remap', 'dims_remap', 'dims_stats', 'multispatialcorr', 
-            'frdistance_pertuning', 'spatialcorr_pertuning', 'nrooms_pertuning', 'pca', 'remap_vec'}:
+            'frdistance_pertuning', 'spatialcorr_pertuning', 'nrooms_pertuning', 'pca', 'remap_vec', 'vis'}:
     df = load_dataframe('remapping', basepath)
 else:
     df = load_dataframe('recruitment', basepath)
@@ -431,21 +536,25 @@ print ("Plotting results...")
 
 if plot == 'placefields':
 
-    visualize = ['arg_dim_bbox', 'arg_env', 'arg_current_amp']
-    labels = ['d', 'e']
-    params_sweep = [(64, 0, 0),(64, 0, -10)]
+    dim_pcs = df.iloc[0]['arg_dim_pcs']
+    n_neurons = df.iloc[0]['arg_nb_neurons']
+    active = dim_pcs == 2
+    visualize = ['arg_path_type','arg_simulate']
+    labels = ['p', 's']
+    params_sweep = [('grid', 'minimization')]
     tags = ['pfs']
-    neurons = [3, 7, 12, 13, 8, 0, 1, 2, 4, 6]
+    neurons = np.arange(n_neurons) #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     colorsvect = None #[1,1,1,1,1]]
+    
 
     df = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_pfs(df, neurons, visualize, labels, active=False)
+    newdf = prepare_pfs(df, neurons, visualize, labels, active=active)
 
     title = ''
     axis_labels = []
     print("Plotting results...")
     name += '-' + plot
-    make_plot('pfs', newdf, title, axis_labels, name, colorsvect=colorsvect)
+    make_plot('pfs2' if dim_pcs == 2 else 'pfs1', newdf, title, axis_labels, name, colorsvect=colorsvect)
 
 
 #### Place cell plots #############
@@ -485,13 +594,13 @@ if plot == 'remapping' or plot == 'nrooms':
 
 if plot == 'remapping' or plot == 'measures':
 
-    visualize = ['arg_dim_bbox','arg_encoding']
-    labels = ['d', 'e']
-    params_sweep = [(64, 'flexible')]
+    visualize = ['arg_path_type','arg_simulate']
+    labels = ['p', 's']
+    params_sweep = [('grid', 'minimization')]
     tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff']
     
     fdf = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label= 'arg_encoding', labels= labels, visualize=visualize)
+    newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label= 'arg_simulate', labels= labels, visualize=visualize)
     
     title = 'FR overlap and spatial corr. across environments'
     axis_labels = ['', 'Overlap and Spatial Corr.'] 
@@ -637,13 +746,13 @@ if plot == 'remapping' or plot == 'nrooms_pertuning':
 
 if plot == 'remapping' or plot == 'pca':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons']
-    labels = ['d', 'n']
-    params_sweep = [(4,1024)]
-    tags = ['var_explained_r', 'pca_proj_r', 'y_trajs']
+    visualize = ['arg_path_type','arg_simulate']
+    labels = ['p', 's']
+    params_sweep = [('grid', 'minimization')]
+    tags = ['var_explained_r', 'pca_proj_r']
 
     fdf = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_single(fdf, tags,['var_r','proj_r','y_trajs'], labels, visualize)
+    newdf = prepare_single(fdf, tags,['var_r','proj_r'], labels, visualize)
     
     title = 'PCA analysis'
     axis_labels = [] 
@@ -651,15 +760,31 @@ if plot == 'remapping' or plot == 'pca':
     namea = name + '-' + 'pca'
     make_plot('pca', newdf, title, axis_labels, namea)
 
+if plot == 'remapping' or plot == 'vis':
+
+    visualize = ['arg_path_type','arg_simulate']
+    labels = ['p', 's']
+    params_sweep = [('grid', 'minimization')]
+    tags = ['x_trajs', 'xhat_trajs', 'g_trajs', 'ghat_trajs', 'D']
+
+    fdf = filter(df, visualize, params_sweep, tags)
+    newdf = prepare_single(fdf, tags, ['x_trajs', 'xhat_trajs', 'g_trajs', 'ghat_trajs', 'D'], labels, visualize)
+    
+    title = 'Visualization tools'
+    axis_labels = [] 
+    print("Plotting results...")
+    namea = name + '-' + 'vis'
+    make_plot('vis', newdf, title, axis_labels, namea)
+
 if plot == 'remapping' or plot == 'remap_vec':
 
-    visualize = ['arg_dim_bbox','arg_nb_neurons']
-    labels = ['d', 'n']
-    params_sweep = [(3,768)]
+    visualize = ['arg_path_type','arg_simulate']
+    labels = ['p', 's']
+    params_sweep = [('grid', 'minimization')]
     tags = ['norm_remap','norm_Dy','norm_Dye','norm_nu']
 
     fdf = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label='arg_dim_bbox', labels= labels, visualize=visualize)
+    newdf = prepare_combine(fdf, across=False, data_label = tags, xaxis_label='arg_simulate', labels= labels, visualize=visualize)
     
     title = 'Remapping vector norm decompositon'
     axis_labels = ['','Norm'] 

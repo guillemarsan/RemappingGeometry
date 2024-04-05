@@ -87,7 +87,9 @@ if __name__ == "__main__":
     parser.add_argument("--gif", action='store_true', default=False,
                         help="Generate a gif of the bbox")
     parser.add_argument("--save", action='store_true', default=True,
-                        help="Save V, s, r and Th matrices")
+                        help="Save s and r matrices")
+    parser.add_argument("--save_input", action='store_true', default=False,
+                        help="Save Th and x matrices")
 
     
     args = parser.parse_args()
@@ -115,12 +117,16 @@ if __name__ == "__main__":
     results = dict(datetime=timestr, basepath=basepath, args=vars(args))
     
     ## CONSTRUCTION OF P,Q
-    if args.encoding in {'parallel', 'flexible', 'sensory'}:
+    if args.encoding in {'parallel', 'flexible', 'sensory', 'flexibleGP', 'sensoryGP', 'flexibler'}:
         # Also environment variables
-        dim_e = int((dbbox - 2*args.dim_pcs)/2) if args.encoding in {'parallel', 'flexible'} else int(dbbox/2)
-        e, de, eofp = get_pathe(p, dim_e, args.env, dt, flexible=args.encoding in {'flexible', 'sensory'}, variance=args.embedding_sigma)
+        dim_e = int((dbbox - 2*args.dim_pcs)/2) if args.encoding in {'parallel', 'flexible', 'flexibleGP', 'flexibler'} else int(dbbox/2)
 
-        if args.encoding in {'parallel', 'flexible'}:
+        variab = 'l' if args.encoding == 'parallel' else \
+                ('m' if args.encoding in {'flexibleGP', 'sensoryGP'} else \
+                ('h' if args.encoding in {'flexible, sensory'} else 'r'))
+        e, de, eofp = get_pathe(p, dim_e, args.env, dt, variability = variab, variance=args.embedding_sigma)
+
+        if args.encoding in {'parallel', 'flexible', 'flexibleGP', 'flexibler'}:
             g = np.vstack([p,e])
             dg = np.vstack([dp,de])
         else: 
@@ -187,10 +193,11 @@ if __name__ == "__main__":
 
     # Simulate the model
     print('Simulating model...')
-    x0 = x[:,0]
-    r0 = np.linalg.lstsq(bias_corr*D,x0+b[:,0]/model.lamb,rcond=None)[0]
-    x_hat0 = D @ r0 - b[:,0] / model.lamb   
-    V0 = model.F @ x0 - G @ x_hat0
+    if args.simulate != 'minimization':
+        x0 = x[:,0]
+        r0 = np.linalg.lstsq(bias_corr*D,x0+b[:,0]/model.lamb,rcond=None)[0]
+        x_hat0 = D @ r0 - b[:,0] / model.lamb   
+        V0 = model.F @ x0 - G @ x_hat0
 
     decoder = lambda r, i: D @ r - b[:,i] / model.lamb
     if args.simulate == 'pathint_one':
@@ -222,7 +229,7 @@ if __name__ == "__main__":
     results['x_error'] = np.mean(np.linalg.norm(x_hat - x, axis=0))
     results['k_error'] = np.mean(np.linalg.norm(k_hat - k, axis=0))
     results['g_error'] = np.mean(np.linalg.norm(g_hat - g, axis=0))
-    if args.encoding in {'parallel', 'flexible'}:
+    if args.encoding in {'parallel', 'flexible', 'flexibleGP', 'flexibler'}:
         results['p_error'] = np.mean(np.linalg.norm(g_hat[:args.dim_pcs,:] - g[:args.dim_pcs,:], axis=0))
         results['e_error'] = np.mean(np.linalg.norm(g_hat[args.dim_pcs:,:] - g[args.dim_pcs:,:], axis=0))
 
@@ -259,14 +266,25 @@ if __name__ == "__main__":
         results['meanfr'] = meanfr.tolist()
 
     if args.save:
-        if args.encoding == 'rotation':
-            np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
-        
         if args.simulate != 'minimization':
             spike_times = np.argwhere(s)
             np.savetxt("%s-stimes.csv" % basepath, spike_times, fmt='%i')
         else:
             np.savetxt("%s-rates.csv" % basepath, r, fmt='%.5e')
+    if args.save_input:
+        if args.encoding in {'rotation', 'gridcells'}:
+            np.savetxt("%s-Th.csv" % basepath, Theta, fmt='%.3e')
+        np.savetxt("%s-x.csv" % basepath, x, fmt='%.3e')
+        np.savetxt("%s-xhat.csv" % basepath, x_hat, fmt='%.3e')
+
+        if args.encoding != 'gridcells':
+            np.savetxt("%s-g.csv" % basepath, g, fmt='%.3e')
+            np.savetxt("%s-ghat.csv" % basepath, g_hat, fmt='%.3e')
+        else:
+            g = np.vstack([Encoder.decode(x[:2,:]), Encoder.decode(x[2:,:])])
+            g_hat = np.vstack([Encoder.decode(x_hat[:2,:]), Encoder.decode(x_hat[2:,:])])
+            np.savetxt("%s-g.csv" % basepath, g, fmt='%.3e')
+            np.savetxt("%s-ghat.csv" % basepath, g_hat, fmt='%.3e')
 
         
         #np.savetxt("%s-D.csv" % basepath, D, fmt='%.3e')
@@ -278,7 +296,7 @@ if __name__ == "__main__":
     # Plot
     if args.plot:
 
-        if args.encoding in {'parallel', 'flexible', 'sensory'}:
+        if args.encoding in {'parallel', 'flexible', 'flexibleGP', 'flexibler', 'sensory', 'sensoryGP'}:
             print('Generating (p,e) plot...')
             plot.plot_pe(p, eofp, e, t, basepath)
 
