@@ -72,7 +72,7 @@ def read_trajs(set):
         for file in filelist:
             with open(file) as res_file:
                 a = np.genfromtxt(res_file)
-            all[i].append(a)
+            all[i].append(a) if a.ndim > 1 else all[i].append(a[:,np.newaxis])
         all[i] = np.stack(all[i], axis=2)
         i += 1
 
@@ -102,6 +102,18 @@ def read_inputs(set):
         i += 1
     xs = np.stack(xs,axis=2)
     return xs
+
+def read_Th(set):
+
+    i = 0
+    all = []
+    for file in set['Th']:
+        with open(file) as res_file:
+            a = np.genfromtxt(res_file)
+        all.append(a)
+        i += 1
+
+    return np.stack(all, axis=-1)
 
 ##################### COMPUTES ####################################
 
@@ -211,6 +223,7 @@ def analyse_pfs_r(point):
         point['xhat'] = "{0}-xhat.csv".format(id)
         point['g'] = "{0}-g.csv".format(id)
         point['ghat'] = "{0}-ghat.csv".format(id)
+        point['Th'] = "{0}-Th.csv".format(id)
     
 
     return point
@@ -382,6 +395,11 @@ def analyse_remapping(set, params):
         all_trajs = read_trajs(set)
         analyse_store_trajs(point, all_trajs)
         analyse_store_D(point, D)
+        analyse_tagged_idx(set, point)       
+        if point['arg_encoding'] == 'rotation':
+            Th = read_Th(set)
+            if np.unique(np.transpose(Th, (2,0,1)).reshape(-1, Th.shape[-1]), axis=1).shape[0]: # only for nullspace remapping
+                analyse_nullspace_dimred(point, all_ratemaps, D, Th)
     
     analyse_remapping_vector(point, all_ratemaps, D)
     analyse_nrooms(set, point)
@@ -454,6 +472,34 @@ def analyse_pca(point, all_ratemaps):
     
     point['var_explained_r'] = tostore(varexp_r)
     point['pca_proj_r'] = tostore(pca_proj_r)
+
+def analyse_nullspace_dimred(point, all_ratemaps, D, Th):
+
+    def nullspace_dimred(x):
+        points = np.mean(x, axis=1)
+        centered = points - np.mean(points, axis=1)[:,np.newaxis]
+        cov = np.cov(centered)
+        lmb, v = np.linalg.eigh(cov)
+        idx = np.argsort(lmb)[::-1]
+        null_dir = v[:, idx][:,0]
+        return null_dir
+    
+    def closest_orthogonal_vector(v1, v2, v3):
+        A = np.column_stack((v1, v2))
+        P = A @ np.linalg.inv(A.T @ A) @ A.T
+        v_proj = P @ v3
+        v_orth = v3 - v_proj
+        return v_orth
+
+    null_dir = nullspace_dimred(all_ratemaps) 
+    twovec = D.T @ Th[:,:,0] 
+    null_dir_ort = closest_orthogonal_vector(twovec[:,0], twovec[:,1], null_dir)
+
+    dimred_basis = np.vstack([twovec[:,0], twovec[:,1], null_dir_ort])
+    dimred_proj = np.einsum('ab,bcd->acd',dimred_basis,all_ratemaps)
+    
+    point['dimred_basis'] = tostore(dimred_basis)
+    point['dimred_proj'] = tostore(dimred_proj)
 
 def analyse_store_D(point, D):
     point['D'] = tostore(D)
@@ -612,6 +658,20 @@ def analyse_spatialcorr(point, all_pfs):
     
     point['spatialcorr'] = tostore(resultsp)
     point['spatialcorrshuff'] = tostore(resultspshuff)
+
+def analyse_tagged_idx(set, point):
+
+    dirs = set['arg_env'].shape[0]
+    neu = set.iloc[0]['arg_nb_neurons']
+    tagged = np.zeros((neu, dirs))
+    for i in np.arange(dirs):
+        casenow = set.iloc[i]
+        idx = eval(casenow['arg_tagged_idx'])
+        tagged[idx,i] = 1
+
+    point['tagged_idx'] = tostore(tagged)
+
+
 
 def analyse_multispatialcorr(point, all_pfs):
 

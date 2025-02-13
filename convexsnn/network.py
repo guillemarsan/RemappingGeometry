@@ -142,6 +142,13 @@ def get_model(inp, n, out, connectivity, decod_amp=1, thresh_amp=1, load_id=0,
     D = D/nD
 
     ## Conjunctive vs mixed code
+    if conj == 'Mex':
+        p = 0
+        for i in np.arange(out/2):
+            D[:p,int(i)*5:int(i)*5+5] = 0
+            D[p+2:,int(i)*5:int(i)*5+5] = 0
+            p += 2
+        D = D/np.linalg.norm(D, axis=0)
     if conj == 'C':
         p = 0
         for _ in np.arange(out/2):

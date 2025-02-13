@@ -123,7 +123,7 @@ if __name__ == "__main__":
 
         variab = 'l' if args.encoding == 'parallel' else \
                 ('m' if args.encoding in {'flexibleGP', 'sensoryGP'} else \
-                ('h' if args.encoding in {'flexible, sensory'} else 'r'))
+                ('h' if args.encoding in {'flexible', 'sensory'} else 'r'))
         e, de, eofp = get_pathe(p, dim_e, args.env, dt, variability = variab, variance=args.embedding_sigma)
 
         if args.encoding in {'parallel', 'flexible', 'flexibleGP', 'flexibler'}:

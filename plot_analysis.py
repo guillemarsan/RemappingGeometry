@@ -5,7 +5,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from scipy.stats.stats import pearsonr
+import scipy.stats
 from scipy import ndimage
 import numpy as np
 import time
@@ -21,19 +21,34 @@ def pearson(x,y,i):
 
     c = plt.rcParams['axes.prop_cycle'].by_key()['color']
     coeffs = np.polyfit(x,y,1)
-    Rp = pearsonr(x, y)
+    Rp = scipy.stats.pearsonr(x, y)
     formatstr = "r = {:.4f} \n" + ("p = {:.3e}" if Rp[1] < 0.001 else "p = {:.3f}")
     plt.text(0.1, 0.9-0.1*i, formatstr.format(Rp[0], Rp[1]), transform=plt.gca().transAxes)
     samples = np.linspace(np.min(x)-0.01,np.max(x)+0.01,100)
     pyhat = coeffs[1] + coeffs[0]*samples
     plt.plot(samples,pyhat,color=c[i])
 
-def compute_mesh(D):
-    x, y = np.meshgrid(np.linspace(-1, 1, 50), np.linspace(-1, 1, 50))
+def compute_mesh(D, tagged_idx):
+    x, y = np.meshgrid(np.linspace(-1, 1, 200), np.linspace(-1, 1, 200))
     mesh = np.vstack([x.ravel(), y.ravel()])
     Encoder = AngleEncoder()
     kgrid = Encoder.encode(mesh)
     rates = D.T @ kgrid
+    rates[np.where(tagged_idx),:] = 0
+    argmaxs = np.argmax(rates, axis=0)
+    return mesh, argmaxs
+
+def compute_mesh_proj(D, tagged_idx):
+
+    def inv_stereo_proj(x, y):
+        sum = x**2 + y**2 + 1
+        return np.vstack([2*x/sum, 2*y/sum, (x**2 + y**2 - 1)/sum])
+
+    x, y = np.meshgrid(np.linspace(-1, 1, 200), np.linspace(-1, 1, 200))
+    mesh = np.vstack([x.ravel(), y.ravel()])
+    kgrid = inv_stereo_proj(x.ravel(), y.ravel())
+    rates = D.T @ kgrid
+    rates[np.where(tagged_idx),:] = 0
     argmaxs = np.argmax(rates, axis=0)
     return mesh, argmaxs
 
@@ -146,6 +161,45 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
             conditions.append(xaxis[i])
         plt.xticks(iticks, conditions)
 
+    elif ptype == "hist_measure":
+
+        conditions = []
+
+        _, axes = plt.subplots(1, int(len(data)/2))
+        plts = np.arange(len(data), step=2)
+        j = 0
+        for i in plts:
+
+            point = data.iloc[i]
+            pointshuff = data.iloc[i + 1]
+            mean = point["mean"]
+            sem = point["sem"]
+            meanshuff = pointshuff["mean"]
+            semshuff = pointshuff["sem"]
+            values = point["values"][0]
+
+            conditions.append(point["xaxis"][0])
+
+            hist_data = axes[j].hist(values, bins=20, color='k', alpha=0.5, label=point["legend"])
+            bins = hist_data[1]
+            freq = hist_data[0]
+            max_freq = np.max(freq)
+            axes[j].vlines(x=mean, ymin=0, ymax=max_freq + 1, color="k", alpha=1)
+            _, p_value = scipy.stats.ttest_1samp(values, meanshuff)
+            if p_value < 0.05:
+                minm = np.minimum(meanshuff[0], mean[0])
+                maxm = np.maximum(meanshuff[0], mean[0])
+                axes[j].hlines(y=max_freq+1.1, xmin=minm, xmax=maxm, color="k", alpha=1)
+                axes[j].scatter((maxm+minm)/2, max_freq+1.3, marker="*", color="k")
+            axes[j].vlines(x=meanshuff, ymin=0, ymax=max_freq + 1, color="r", alpha=1)
+            axes[j].set_xticks(np.round(np.linspace(np.min(bins), np.max(bins), 3),2))
+
+            axes[j].set_xlabel('Overlap' if j == 0 else 'Spatial Correlation')
+            axes[j].set_ylabel('Count')
+
+            j += 1
+
+
     elif ptype == 'scatter':
         
 
@@ -221,11 +275,17 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
             pfs = point['pfs']
 
             axsub = plt.subplot(cases, 1, i)
-            axsub.set_title(point['legend'], fontsize=7)
+            # axsub.set_title(point['legend'], fontsize=7)
             for cell in np.arange(num_neurons):
                 pf = pfs[cell,:]
-                axsub.plot(pf, color=c[cell % 10] if colorsvect is None else c[colorgroups[cell % 10]])
+                if np.any(pf):
+                    axsub.plot(np.linspace(-1,1,400), pf, color=c[cell % 10] if colorsvect is None else c[colorgroups[cell % 10]])
+            axsub.spines[['right', 'top']].set_visible(False)
+            axsub.set_facecolor('none')
+            if i < cases: axsub.set_xticks([])
             i += 1
+        axsub.set_xlabel('Position')
+        axsub.set_ylabel('Firing rate (Hz)')
         
         if num_neurons < 20:
             if colorsvect is None:
@@ -242,10 +302,31 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
         var_r = point['var_r']
         proj_r = point['proj_r']
 
-        ax1 = plt.subplot(1, 2, 1, projection='3d')
+        if 'nproj_r' in point:
+            ax1 = plt.subplot(2, 2, 1, projection='3d')
+            ax2 = plt.subplot(2, 2, 3, projection='3d')
+        else:
+            ax1 = plt.subplot(1, 2, 1, projection='3d')
+        
+        #pca
         for e in np.arange(proj_r.shape[2]):
             ax1.scatter(proj_r[0,:,e], proj_r[1,:,e], proj_r[2,:,e])
         ax1.set_title('PCA of r')
+
+        # nullspace proj
+        if 'nproj_r' in point:
+            line_styles = ['-', '--', ':']
+            nproj_r = point['nproj_r']
+            shadow = np.min(nproj_r[2,:,:]) - 0.1
+            for e in np.arange(nproj_r.shape[2]):
+                ax2.plot(nproj_r[0,:,e], nproj_r[1,:,e], nproj_r[2,:,e], color='k', linestyle= line_styles[e % len(line_styles)])
+                ax2.scatter(nproj_r[0,0,e], nproj_r[1,0,e], nproj_r[2,0,e], color='k', s=150)
+                ax2.plot(nproj_r[0,:,e], nproj_r[1,:,e], shadow, color='k', alpha=0.2, linestyle= line_styles[e % len(line_styles)])
+            ax2.set_title('Nullspace_proj of r')
+            ax2.set_xlabel('zp1')
+            ax2.set_ylabel('zp2')
+            ax2.set_zlabel('nullspace')
+
 
         ax2 = plt.subplot(1, 2, 2)
         ax2.plot(np.arange(var_r.shape[0]), var_r)
@@ -255,6 +336,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
     elif ptype == 'vis':
 
         c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        line_styles = ['-', '--', ':']
         plt.figure(figsize=(10,10))
         point = data.iloc[0]
         x = point['x_trajs']
@@ -262,28 +344,40 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
         g = point['g_trajs']
         ghat = point['ghat_trajs']
 
+        tagged_idx = point['tagged_idx']
+        conditions = np.unique(tagged_idx, axis=0).shape[0]
+
         cylinder = True
         hat = True
         if x.shape[0] == 3 or cylinder:
-            ax3 = plt.subplot(1, 2, 1, projection='3d')
+            ax3 = plt.subplot(1, conditions+1, 1, projection='3d')
             for e in np.arange(x.shape[2]):
-                ax3.plot(x[0,:,e], x[1,:,e], x[2,:,e])
-                ax3.scatter(x[0,0,e], x[1,0,e], x[2,0,e], color=c[e], s=150)
-                if hat: ax3.plot(xhat[0,:,e], xhat[1,:,e], xhat[2,:,e], color = c[e], alpha=0.5)
+                ax3.plot(x[0,:,e], x[1,:,e], x[2,:,e], color='k', linestyle= line_styles[e % len(line_styles)] )
+                ax3.scatter(x[0,0,e], x[1,0,e], x[2,0,e], color='k', s=150)
+                if hat: ax3.plot(xhat[0,:,e], xhat[1,:,e], xhat[2,:,e], color = 'k', alpha=0.5, linestyle= line_styles[e % len(line_styles)] )
+                ax3.plot(x[0,:,e], x[1,:,e], -1.5, color='k', alpha=0.1, linestyle= line_styles[e % len(line_styles)] )
             ax3.set_title('Embedding space y')
-            ax3.set_xlim([-np.sqrt(2),np.sqrt(2)])
-            ax3.set_ylim([-np.sqrt(2),np.sqrt(2)])
-            if not cylinder: 
-                ax3.set_zlim([-1,1])
-            ax3.set_box_aspect([np.ptp(axis) for axis in [ax3.get_xlim(), ax3.get_ylim(), ax3.get_zlim()]])
+            if x.shape[0] == 3:
+                ax3.set_xlim([-np.sqrt(2),np.sqrt(2)])
+                ax3.set_ylim([-np.sqrt(2),np.sqrt(2)])
+                ax3.set_zlim([-np.sqrt(2),np.sqrt(2)])  
+            else: 
+                ax3.set_xlim([-np.sqrt(2),np.sqrt(2)])
+                ax3.set_ylim([-np.sqrt(2),np.sqrt(2)])
+                ax3.set_zlim([-np.sqrt(2),np.sqrt(2)])  
+            ax3.set_box_aspect([1,1,1])
+            ax3.set_xlabel('y0') if x.shape[0] == 3 else ax3.set_xlabel('zp1')
+            ax3.set_ylabel('y1') if x.shape[0] == 3 else ax3.set_ylabel('zp2')
+            ax3.set_zlabel('y2') if x.shape[0] == 3 else ax3.set_zlabel('zc1')
         else:
-            ax3a = plt.subplot(2, 2, 1)
+            ax3a = plt.subplot(2, conditions+1, 1)
             for e in np.arange(proj_r.shape[2]):
                 ax3a.plot(x[0,:,e], x[1,:,e])
                 if hat: ax3a.plot(xhat[0,:,e], xhat[1,:,e])
             ax3a.set_xlim([-1.1,1.1])
             ax3a.set_ylim([-1.1,1.1])
             ax3a.set_title('y(0),y(1)')
+            ax3a.set_aspect('equal')
 
             ax3b = plt.subplot(2, 2, 2)
             for e in np.arange(proj_r.shape[2]):
@@ -291,51 +385,90 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
                 if hat: ax3a.plot(xhat[2,:,e], xhat[3,:,e])
             ax3b.set_xlim([-1.1,1.1])
             ax3b.set_ylim([-1.1,1.1])
-            ax3b.set_title('y(2),y(3)')      
+            ax3b.set_title('y(2),y(3)') 
+            ax3b.set_aspect('equal')   
 
+
+        tagged_idx = point['tagged_idx']
+        conditions = np.unique(tagged_idx, axis=0).shape[0]
+        axes = []
         fields = True
-        if fields:
-            D = point['D']
-            mesh, argmax = compute_mesh(D)
+        for a in np.arange(conditions):
+            axes.append(plt.subplot(1, conditions+1, a+2))
 
-        ax4 = plt.subplot(1, 2, 2)
-        if fields:
-            for i in np.arange(D.shape[1]):
-                meshi = mesh.copy()
-                meshi[:, argmax != i] = 0
-                dims = int(np.sqrt(meshi.shape[1]))
-                map2d = np.ones((meshi.shape[1]))
-                map2d[np.argwhere(argmax != i)] = 0
-                map2d = map2d.reshape((dims,dims))
-                structure = np.ones((3, 3), dtype=int)
+            if fields:
+                D = point['D']
+                if x.shape[0] == 3:
+                    mesh, argmax = compute_mesh_proj(D, tagged_idx[:,a])
+                else:
+                    mesh, argmax = compute_mesh(D, tagged_idx[:,a])
 
-                labeled, ncomponents = ndimage.label(map2d, structure)
-                labeled = labeled.reshape(-1)
-                for com in np.arange(ncomponents) + 1:
-                    com_lab = np.argwhere(labeled == com)[:,0]
-                    if com_lab.shape[0] > 2:
-                        pointsi = meshi[:, com_lab]
-                        if len(np.unique(pointsi[0,:])) > 1 and len(np.unique(pointsi[1,:])) > 1:
-                            hullni = ConvexHull(pointsi.T)
-                            ax4.fill(pointsi[0,hullni.vertices], pointsi[1,hullni.vertices], alpha=0.5, color=c[i%10], lw=0)
+                for i in np.arange(D.shape[1]):
+                    meshi = mesh.copy()
+                    meshi[:, argmax != i] = 0
+                    dims = int(np.sqrt(meshi.shape[1]))
+                    map2d = np.ones((meshi.shape[1]))
+                    map2d[np.argwhere(argmax != i)] = 0
+                    map2d = map2d.reshape((dims,dims))
+                    structure = np.ones((3, 3), dtype=int)
 
-        for e in np.arange(g.shape[2]):
-            disc_idx = np.where(np.linalg.norm(np.diff(g[:,:,e]),axis=0) > 0.5)[0]+1
-            disc_g = np.hsplit(g[:,:,e], disc_idx)
-            for g_seg in disc_g:
-                ax4.plot(g_seg[0,:], g_seg[1,:], color=c[e])
-            ax4.scatter(g[0,0,e], g[1,0,e], color=c[e])
-            if hat:
-                disc_idx = np.where(np.linalg.norm(np.diff(ghat[:,:,e]),axis=0) > 0.5)[0]+1
-                disc_ghat = np.hsplit(ghat[:,:,e], disc_idx)
-                for ghat_seg in disc_ghat:
-                    ax4.plot(ghat_seg[0,:], ghat_seg[1,:], color=c[e], alpha=0.5)
-        ax4.set_title('Instrinsic manifold')
-        ax4.set_xlim([-1,1])
-        ax4.set_ylim([-1,1])
-        ax4.set_aspect('equal')  
+                    labeled, ncomponents = ndimage.label(map2d, structure)
+                    labeled = labeled.reshape(-1)
+                    for com in np.arange(ncomponents) + 1:
+                        com_lab = np.argwhere(labeled == com)[:,0]
+                        if com_lab.shape[0] > 2:
+                            pointsi = meshi[:, com_lab]
+                            if len(np.unique(pointsi[0,:])) > 1 and len(np.unique(pointsi[1,:])) > 1:
+                                try:
+                                    hullni = ConvexHull(pointsi.T)  
+                                except Exception as e: # if very bad luck and points are coplanar
+                                    hullni = ConvexHull(pointsi.T, qhull_options='QJ')
+                                axes[a].fill(pointsi[0,hullni.vertices], pointsi[1,hullni.vertices], alpha=0.5, color=c[i%10], lw=0)
+        
+            if x.shape[0] == 3:
+                for traj_idx in np.arange(x.shape[2]):
+                    x_trajs = x[:,:,traj_idx]
+                    x_trajs = x_trajs/np.linalg.norm(x_trajs, axis=0)
+                    planex = x_trajs[0,:]/(1-x_trajs[2,:])
+                    planey = x_trajs[1,:]/(1-x_trajs[2,:])
+                    planex[np.abs(planex) > 1] = np.nan
+                    planey[np.abs(planey) > 1] = np.nan
+                    axes[a].plot(planex, planey, color='k', linestyle=line_styles[traj_idx % len(line_styles)] )
+                    axes[a].scatter(planex[0], planey[0], color='k')
+                    if hat:
+                        xhat_trajs = xhat[:,:,traj_idx]
+                        xhat_trajs = xhat_trajs/np.linalg.norm(xhat_trajs, axis=0)
+                        planexhat = xhat_trajs[0,:]/(1-xhat_trajs[2,:])
+                        planeyhat = xhat_trajs[1,:]/(1-xhat_trajs[2,:])
+                        planexhat[np.abs(planexhat) > 1] = np.nan
+                        planeyhat[np.abs(planeyhat) > 1] = np.nan
+                        axes[a].plot(planexhat, planeyhat, color='k', alpha=0.5, linestyle= line_styles[traj_idx % len(line_styles)] )
+            else:        
+                for e in np.arange(g.shape[2]):
+                    disc_idx = np.where(np.linalg.norm(np.diff(g[:,:,e]),axis=0) > 0.5)[0]+1
+                    disc_g = np.hsplit(g[:,:,e], disc_idx)
+                    for g_seg in disc_g:
+                        axes[a].plot(g_seg[0,:], g_seg[1,:], color='k', linestyle= line_styles[e % len(line_styles)] )
+                    axes[a].scatter(g[0,0,e], g[1,0,e], color='k')
+                    if hat:
+                        disc_idx = np.where(np.linalg.norm(np.diff(ghat[:,:,e]),axis=0) > 0.5)[0]+1
+                        disc_ghat = np.hsplit(ghat[:,:,e], disc_idx)
+                        for ghat_seg in disc_ghat:
+                            axes[a].plot(ghat_seg[0,:], ghat_seg[1,:], color='k', alpha=0.5, linestyle=line_styles[e % len(line_styles)] )
+            axes[a].set_title('Instrinsic manifold')
+            axes[a].set_xlim([-1,1])
+            axes[a].set_ylim([-1,1])
+            axes[a].set_aspect('equal')  
+            axes[a].set_xticks([-1, 0, 1])
+            axes[a].set_yticks([-1, 0, 1])
+            if x.shape[0] == 3:
+                axes[a].set_xlabel('cog1')
+                axes[a].set_ylabel('cog2')
+            else:
+                axes[a].set_xlabel('p')
+                axes[a].set_ylabel('c')
     
-    if ptype not in {'pfs2','pfs1','pca', 'vis'}:
+    if ptype not in {'pfs2','pfs1','pca', 'vis', 'hist_measure'}:
         plt.title(title, fontsize=10)
         plt.xlabel(axis_labels[0], fontsize=10)
         plt.ylabel(axis_labels[1], fontsize=10)
@@ -500,9 +633,9 @@ def prepare_pfs(df, neurons, visualize, labels, active=False):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='gridcellsd1M',
+    parser.add_argument("--dir", type=str, default='gridcellsd1',
                         help="Directory to read and write files")
-    parser.add_argument("--dir_loc", type=str, default='./data/v1',
+    parser.add_argument("--dir_loc", type=str, default='./v1',
                         help="Location of the directory" )
     parser.add_argument("--plot", type=str, default='vis',
                         help = 'Which plot to make')
@@ -606,7 +739,7 @@ if plot == 'remapping' or plot == 'measures':
     axis_labels = ['', 'Overlap and Spatial Corr.'] 
     print("Plotting results...")
     namea = name + '-' + 'measures'
-    make_plot('bars_shuff', newdf, title, axis_labels, namea, ynormalized=True)
+    make_plot('hist_measure', newdf, title, axis_labels, namea, ynormalized=True)
 
 if plot == 'remapping' or plot == 'variance_remap':
 
@@ -749,10 +882,11 @@ if plot == 'remapping' or plot == 'pca':
     visualize = ['arg_path_type','arg_simulate']
     labels = ['p', 's']
     params_sweep = [('grid', 'minimization')]
-    tags = ['var_explained_r', 'pca_proj_r']
+    nullspace_proj = 'dimred_proj' in df
+    tags = ['var_explained_r', 'pca_proj_r'] if not nullspace_proj else ['var_explained_r', 'pca_proj_r', 'dimred_proj']
 
     fdf = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_single(fdf, tags,['var_r','proj_r'], labels, visualize)
+    newdf = prepare_single(fdf, tags,['var_r','proj_r'] if not nullspace_proj else ['var_r', 'proj_r', 'nproj_r'], labels, visualize)
     
     title = 'PCA analysis'
     axis_labels = [] 
@@ -765,10 +899,10 @@ if plot == 'remapping' or plot == 'vis':
     visualize = ['arg_path_type','arg_simulate']
     labels = ['p', 's']
     params_sweep = [('grid', 'minimization')]
-    tags = ['x_trajs', 'xhat_trajs', 'g_trajs', 'ghat_trajs', 'D']
+    tags = ['x_trajs', 'xhat_trajs', 'g_trajs', 'ghat_trajs', 'D', 'tagged_idx']
 
     fdf = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_single(fdf, tags, ['x_trajs', 'xhat_trajs', 'g_trajs', 'ghat_trajs', 'D'], labels, visualize)
+    newdf = prepare_single(fdf, tags, ['x_trajs', 'xhat_trajs', 'g_trajs', 'ghat_trajs', 'D', 'tagged_idx'], labels, visualize)
     
     title = 'Visualization tools'
     axis_labels = [] 

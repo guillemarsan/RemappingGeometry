@@ -5,14 +5,15 @@ import pathlib, json
 if __name__ == "__main__":
 
     script = 'run_pathint.py' 
-    # cases = ['ED', 'EDr1', 'gridcells', 'EDd1', 'gridcellsd1', 'MSlow', 'MSmed', 'MShigh', \
-    #          'sensorymed', 'sensoryhigh', 'MSlowd1', 'MSmedd1', 'MShighd1', 'sensorymedd1', 'sensoryhighd1', \
-    #          'nullrotation', 'nullrotationd1']
+    cases = ['ED', 'EDr1', 'gridcells', 'EDd1', 'gridcellsd1', 'MSlow', 'MSmed', 'MShigh', \
+             'sensorymed', 'sensoryhigh', 'MSlowd1', 'MSmedd1', 'MShighd1', 'sensorymedd1', 'sensoryhighd1', \
+             'nullrotation', 'nullrotationd1']
     dir_loc = './data/v1/'
     # cases = ['EDd1', 'gridcellsd1', 'MSlowd1', 'MSmedd1', 'MShighd1', 'sensorymedd1', 'sensoryhighd1', \
     #          'nullrotationd1']
 
-    cases = ['gridcellsd18']
+    #cases = ['nullrotation']
+
     compute = True
     analyse = True
     plot = True
@@ -24,6 +25,8 @@ if __name__ == "__main__":
         path = pathlib.Path(dir_loc+ output)
         path.mkdir(parents=True, exist_ok=True)
 
+        num_envs = None
+        envs_list = None
         ## ENCODING - DECODING
         if case == 'ED':
             dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
@@ -35,11 +38,11 @@ if __name__ == "__main__":
             dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
             2, 8, [12], [-1], 'randclosed-load-polyae', 'C', 'gridcells', 10, ''
         elif case == 'EDd1':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 256, [3], [-1], 'randclosed-load-polyae', 'SM', 'rotation', 3, '--save_input'
-        elif case == 'gridcellsd18':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 8, [4], [-1], 'randclosed-load-polyae', 'C', 'gridcells', 3, '--save_input'
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 8, [3], [-1], 'randclosed-load-polyae', 'M', 'rotation', np.array([1,9]), '--save_input'
+        elif case == 'gridcellsd1':
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 8, [4], [-1], 'randclosed-load-polyae', 'C', 'gridcells', np.array([0,3]), '--save_input'
 
         ## MIXED-SELECTIVE
         if case == 'MSlow':
@@ -58,36 +61,36 @@ if __name__ == "__main__":
             dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
             2, 16, [64], [-1], 'randclosed-load-polyae', 'M', 'sensory', 10, ''
         elif case == 'MSlowd1':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 256, [4], [-1], 'randclosed-load-polyae', 'CM', 'parallel', 3, '--input_sepnorm --save_input'
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 8, [4], [-1], 'randclosed-load-polyae', 'CM', 'parallel', np.arange(3), '--input_sepnorm --save_input'
         elif case == 'MSmedd1':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 256, [4], [-1], 'randclosed-load-polyae', 'CM', 'flexibleGP', 3, '--input_sepnorm --save_input'
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 8, [4], [-1], 'randclosed-load-polyae', 'CM', 'flexibleGP', np.array([0,1,5]), '--input_sepnorm --save_input'
         elif case == 'MShighd1':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 256, [4], [4], 'randclosed-load-polyae', 'CM', 'flexible', 3, '--input_sepnorm --save_input'
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 8, [4], [4], 'randclosed-load-polyae', 'CM', 'flexible', np.arange(3), '--input_sepnorm --save_input'
         elif case == 'MSrd1':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 8, [4], [-1], 'randclosed-load-polyae', 'CM', 'flexibler', 3, '--input_sepnorm --save_input'
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 4, [4], [-1], 'randclosed-load-polyae', 'CM', 'flexibler', np.array([0,2]), '--input_sepnorm --save_input'
         elif case == 'MSrd1M':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 8, [4], [-1], 'randclosed-load-polyae', 'M', 'flexibler', 3, '--input_sepnorm --save_input'
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 4, [4], [-1], 'randclosed-load-polyae', 'Mex', 'flexibler', np.array([0,2]), '--input_sepnorm --save_input'
         elif case == 'sensorymedd1':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 256, [4], [-1], 'randclosed-load-polyae', 'M', 'sensoryGP', 3, '--save_input'
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 8, [4], [-1], 'randclosed-load-polyae', 'M', 'sensoryGP', np.array([8,23,10]), '--save_input'
         elif case == 'sensoryhighd1':
-            dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 256, [4], [4], 'randclosed-load-polyae', 'M', 'sensory', 3, '--save_input'
+            dim_pcs, red, dims, variances, model, conj, encoding, envs_list, extra = \
+            1, 8, [4], [4], 'randclosed-load-polyae', 'M', 'sensory', np.arange(3), '--save_input'
 
         ## NULLSPACE REMAPPING
         elif case == 'nullrotation':
             dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            2, 16, [128], [-1], 'randclosed-load-polyae', 'M', 'rotation', None, ''
+            2, 32, [128], [-1], 'randclosed-load-polyae', 'M', 'rotation', None, ''
             tagging_sparse = [1]
             tagging_currents = [-10]
         elif case == 'nullrotationd1':
             dim_pcs, red, dims, variances, model, conj, encoding, num_envs, extra = \
-            1, 256, [3], [-1], 'randclosed-load-polyae', 'M', 'rotation', None, '--save_input'
+            1, 16, [3], [-1], 'randclosed-load-polyae', 'M', 'rotation', None, '--save_input'
             tagging_sparse = [1]
             tagging_currents = [-10]
             
@@ -100,7 +103,7 @@ if __name__ == "__main__":
         script_args += " --dir ./data/v1/" + output + "/"
 
         if experiment == "remapping":
-
+            if envs_list is None: envs_list = np.arange(num_envs)
             if compute:
                 print("## RUNNING SIMULATIONS ##")
                 # Run trials in different environments with different embedding variance and dimensionality
@@ -110,7 +113,7 @@ if __name__ == "__main__":
                     script_args += " --nb_neurons " + str(n) 
                     for sigma in variances:
                         print("Variance:" + str(sigma))
-                        for env in np.arange(num_envs)+50:
+                        for env in envs_list+50:
                             print("Environment:" + str(env))
                             script_args += " --dim_bbox " + str(dim) + " --env " + str(env) + " --embedding_sigma " + str(sigma)
                             command = "python " + script + " " + script_args
@@ -205,7 +208,7 @@ if __name__ == "__main__":
                 print("## PLOTTING RESULTS ##")
                 # Do plots
                 plot_script = "python plot_analysis.py --dir_loc " + dir_loc + " --dir " + output
-                array = ['measures', 'placefields'] if dim_pcs == 2 else ['pca', 'remap_vec']
+                array = ['remap_vec'] if dim_pcs == 2 else ['placefields', 'vis', 'pca', 'remap_vec']
                 for s in array:
                     command = plot_script + " --plot " + s
                     command_list = command.split()

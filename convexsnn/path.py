@@ -170,7 +170,8 @@ def get_pathe(p, dim_e, env, dt, variability='l', variance=-1):
                   np.random.multivariate_normal(np.zeros(dim_pcs),np.eye(dim_pcs)*variance)
             var = multivariate_normal(loc, np.eye(dim_pcs)*0.01)
             eofp[i,:] = np.array([var.pdf(points[:,i]) for i in np.arange(p.shape[1])])
-            eofp[i,:] = eofp/np.max(eofp) - 1
+            eofp[i,:] = eofp[i,:]/np.max(eofp[i,:]) - 1
+            eofp[i,:] += 0.05
   
     eofp = (eofp + 1) % 2 - 1
     if dim_pcs == 2: eofp = eofp.reshape((-1, sqrtnum_bins,sqrtnum_bins))
