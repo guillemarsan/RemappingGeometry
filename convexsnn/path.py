@@ -132,6 +132,17 @@ def get_pathe(p, dim_e, env, dt, variability='l', variance=-1):
             points = np.array(np.meshgrid(points,points)).reshape(2,-1)
 
         return step, points
+    
+    def sample_nu(dim_e, variance):
+        if variance == 1:
+            return np.random.uniform(-1, 1, (dim_e, 1))
+        else:
+            nu = np.zeros((dim_e, 1))
+            for i in np.arange(dim_e): 
+                nu[i] = 2
+                while nu[i] > 1 or nu[i] < -1:
+                    nu[i] = np.random.normal(0,variance)
+            return nu
 
     
     dim_pcs = p.shape[0]
@@ -143,19 +154,13 @@ def get_pathe(p, dim_e, env, dt, variability='l', variance=-1):
     eofp = np.ones((dim_e, p.shape[1]))
     np.random.seed(env)
     if variability == 'l': 
-        if variance == -1:
-            nu = np.random.uniform(-1,1,(dim_e,1))
-            eofp = eofp * nu
-        else:
-            for i in np.arange(dim_e): 
-                nu = 2
-                while nu > 1 or nu < -1:
-                    nu = np.random.normal(0,variance)
-                eofp[i,:] = np.ones(points.shape[1])*nu
+        nu = sample_nu(dim_e, variance)
+        for i in np.arange(dim_e): 
+            eofp[i,:] = np.ones(points.shape[1])*nu[i]
     elif variability == 'm':
         covar = gram(points.T)
         var = variance if variance != -1 else 1
-        nu = np.random.uniform(-1,1,(dim_e,1))
+        nu = sample_nu(dim_e, var)
         for i in np.arange(dim_e): 
             eofp[i,:] = np.random.multivariate_normal(np.zeros(points.shape[1]),var*covar)
         eofp = eofp + nu

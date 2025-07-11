@@ -73,6 +73,8 @@ if __name__ == "__main__":
     
     parser.add_argument('--tagging_sparse', type=float,default=0.,
                         help="Probability of neurons to express opsin")
+    parser.add_argument('--tagging_seed', type=float, default=-1.,
+                        help="Save the seed that was used to tag neurons")
     parser.add_argument('--tagged_idx', nargs='+', type=int, default=[],
                         help="Neurons already tagged for inhibition")
     parser.add_argument('--current_amp', type=float, default=0,

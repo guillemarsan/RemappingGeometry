@@ -402,17 +402,29 @@ def analyse_remapping(set, params):
                 analyse_nullspace_dimred(point, all_ratemaps, D, Th)
     
     analyse_remapping_vector(point, all_ratemaps, D)
-    analyse_nrooms(set, point)
-    analyse_overlap(set, point)
-    
-    all_pfs = read_pfs(set, neu, b, dirs)
 
-    analyse_spatialcorr(point, all_pfs)
-    analyse_multispatialcorr(point, all_pfs)
+    recruitment = np.any(set['arg_tagging_sparse'] > 0)
+    if not recruitment:
+        analyse_nrooms(set, point)
+        analyse_overlap(set, point)
+        
+        all_pfs = read_pfs(set, neu, b, dirs)
 
-    analyse_frdistance_pertuning(set, point, D)
-    analyse_spatialcorr_pertuning(point, all_pfs, D)
-    analyse_nrooms_pertuning(point, all_pfs, D)
+        analyse_spatialcorr(point, all_pfs)
+        analyse_multispatialcorr(point, all_pfs)
+
+        analyse_frdistance_pertuning(set, point, D)
+        analyse_spatialcorr_pertuning(point, all_pfs, D)
+        analyse_nrooms_pertuning(point, all_pfs, D)
+    else:
+        point['sparsity_levels'] = tostore(np.unique(set['arg_tagging_sparse']))
+        analyse_overlap_persparsity(set, point)
+        all_pfs = read_pfs(set, neu, b, dirs)
+        analyse_spatialcorr_persparsity(point, all_pfs, set['arg_tagging_sparse'])
+        if np.any(set['arg_tagging_sparse'] == 0.5):
+            analyse_overlap_sparsecanon(set, point)
+            analyse_spatialcorr_sparsecanon(point, all_pfs, set['arg_tagging_sparse'])
+
     return point
 
 def alignment(a,b):
@@ -560,6 +572,7 @@ def analyse_nrooms(set, point):
     hist = np.histogram(results_nrooms, bins=nbins)[0].astype(float)
     
     point['nrooms'] = tostore(hist)
+    point['nrooms_per'] = tostore(hist/neus)
     point['nrooms_bins'] = tostore(np.arange(dirs+1)) 
 
 def analyse_overlap(set, point):
@@ -606,6 +619,104 @@ def analyse_overlap(set, point):
     point['overlapshuff'] = tostore(resultspshuff)
     point['overlapbinshuff'] = tostore(resultspbinshuff)
 
+def analyse_overlap_persparsity(set, point):
+
+    aux = {}
+    sparsity_levels = eval(point['sparsity_levels'])
+    overlap_per_sparsity = np.zeros((len(sparsity_levels)))
+    overlapbin_per_sparsity = np.zeros((len(sparsity_levels)))
+    overlapshuff_per_sparsity = np.zeros((len(sparsity_levels)))
+    overlapbinshuff_per_sparsity = np.zeros((len(sparsity_levels)))
+    load_string = lambda s: float(np.array(eval(s)[0])) if s != '[]' else np.nan
+    i = 0
+    for s in sparsity_levels:
+        if s == 0:
+            # duplicate the first case as baseline
+            set0 = set[set['arg_tagging_sparse'] == s].copy()
+            set0 = pd.concat([set0, set0], ignore_index=True)
+            analyse_overlap(set0, aux)
+        else:
+            analyse_overlap(set[set['arg_tagging_sparse'] == s], aux)
+
+        overlap_per_sparsity[i] = load_string(aux['overlap'])
+        overlapbin_per_sparsity[i] = load_string(aux['overlapbin'])
+        overlapshuff_per_sparsity[i] = load_string(aux['overlapshuff'])
+        overlapbinshuff_per_sparsity[i] = load_string(aux['overlapbinshuff'])
+        i += 1
+
+    point['overlap_persparsity'] = tostore(overlap_per_sparsity)
+    point['overlapbin_persparsity'] = tostore(overlapbin_per_sparsity)
+    point['overlapshuff_persparsity'] = tostore(overlapshuff_per_sparsity)
+    point['overlapbinshuff_persparsity'] = tostore(overlapbinshuff_per_sparsity)
+
+def analyse_overlap_sparsecanon(set, point):
+
+    aux = {}
+    sparsity_levels = eval(point['sparsity_levels'])
+    overlap_sparsecanon = np.zeros((len(sparsity_levels)))
+    overlap_sparsecanon_sem = np.zeros((len(sparsity_levels)))
+    overlapbin_sparsecanon = np.zeros((len(sparsity_levels)))
+    overlapbin_sparsecanon_sem = np.zeros((len(sparsity_levels)))
+    overlapshuff_sparsecanon = np.zeros((len(sparsity_levels)))
+    overlapshuff_sparsecanon_sem = np.zeros((len(sparsity_levels)))
+    overlapbinshuff_sparsecanon = np.zeros((len(sparsity_levels)))
+    overlapbinshuff_sparsecanon_sem = np.zeros((len(sparsity_levels)))
+    load_string = lambda s: float(np.array(eval(s)[0]))
+    
+    canonical_set = set[set['arg_tagging_sparse'] == 0.5].copy()
+    num_points = canonical_set.shape[0]
+    overlap_sparsecanon_values = np.zeros((len(sparsity_levels), num_points))
+    overlapshuff_sparsecanon_values = np.zeros((len(sparsity_levels), num_points))
+    overlapbin_sparsecanon_values = np.zeros((len(sparsity_levels), num_points))
+    overlapbinshuff_sparsecanon_values = np.zeros((len(sparsity_levels), num_points))
+
+    # copy the case sparsity == 0 as any times as the canonical set
+    row0 = set[set['arg_tagging_sparse'] == 0].iloc[0].copy()
+    setexp = set.copy()
+    for _ in range(len(canonical_set)-1):
+        setexp = pd.concat([setexp, row0.to_frame().T], ignore_index=True)
+
+    i = 0
+    for s in sparsity_levels:
+        num_points = np.sum(setexp['arg_tagging_sparse'] == s)
+
+        j = 0
+        for _, row in setexp[setexp['arg_tagging_sparse'] == s].iterrows():
+            pair = pd.concat([canonical_set.iloc[[j]], row.to_frame().T], ignore_index=True)
+            analyse_overlap(pair, aux)
+            overlap_sparsecanon[i] += load_string(aux['overlap'])
+            overlapbin_sparsecanon[i] += load_string(aux['overlapbin'])
+            overlapshuff_sparsecanon[i] += load_string(aux['overlapshuff'])
+            overlapbinshuff_sparsecanon[i] += load_string(aux['overlapbinshuff'])
+            overlap_sparsecanon_values[i,j] = load_string(aux['overlap'])
+            overlapshuff_sparsecanon_values[i,j] = load_string(aux['overlapshuff'])
+            overlapbin_sparsecanon_values[i,j] = load_string(aux['overlapbin'])
+            overlapbinshuff_sparsecanon_values[i,j] = load_string(aux['overlapbinshuff'])
+            j += 1
+
+        overlap_sparsecanon[i] /= num_points
+        overlap_sparsecanon_sem[i] = np.std(overlap_sparsecanon_values[i,:]) / np.sqrt(num_points)
+        overlapbin_sparsecanon[i] /= num_points
+        overlapbin_sparsecanon_sem[i] = np.std(overlapbin_sparsecanon_values[i,:]) / np.sqrt(num_points)
+        overlapshuff_sparsecanon[i] /= num_points
+        overlapshuff_sparsecanon_sem[i] = np.std(overlapshuff_sparsecanon_values[i,:]) / np.sqrt(num_points)
+        overlapbinshuff_sparsecanon[i] /= num_points
+        overlapbinshuff_sparsecanon_sem[i] = np.std(overlapbinshuff_sparsecanon_values[i,:]) / np.sqrt(num_points)
+
+        i += 1
+
+    point['overlap_sparsecanon'] = tostore(overlap_sparsecanon)
+    point['overlap_sparsecanon_sem'] = tostore(overlap_sparsecanon_sem)
+    point['overlap_sparsecanon_values'] = tostore(overlap_sparsecanon_values)
+    point['overlapbin_sparsecanon'] = tostore(overlapbin_sparsecanon)
+    point['overlapbin_sparsecanon_sem'] = tostore(overlapbin_sparsecanon_sem)
+    point['overlapbin_sparsecanon_values'] = tostore(overlapbin_sparsecanon_values)
+    point['overlapshuff_sparsecanon'] = tostore(overlapshuff_sparsecanon)
+    point['overlapshuff_sparsecanon_sem'] = tostore(overlapshuff_sparsecanon_sem)
+    point['overlapshuff_sparsecanon_values'] = tostore(overlapshuff_sparsecanon_values)
+    point['overlapbinshuff_sparsecanon'] = tostore(overlapbinshuff_sparsecanon)
+    point['overlapbinshuff_sparsecanon_sem'] = tostore(overlapbinshuff_sparsecanon_sem)
+    point['overlapbinshuff_sparsecanon_values'] = tostore(overlapbinshuff_sparsecanon_values)
 
 def analyse_spatialcorr(point, all_pfs):
 
@@ -658,6 +769,78 @@ def analyse_spatialcorr(point, all_pfs):
     
     point['spatialcorr'] = tostore(resultsp)
     point['spatialcorrshuff'] = tostore(resultspshuff)
+
+def analyse_spatialcorr_persparsity(point, all_pfs, sparsity_indices):
+
+    aux = {}
+    sparsity_levels = eval(point['sparsity_levels'])
+    spatialcorr_per_sparsity = np.zeros((len(sparsity_levels)))
+    spatialcorrshuff_per_sparsity = np.zeros((len(sparsity_levels)))
+    load_string = lambda s: float(np.array(eval(s)[0])) if s != '[]' else np.nan
+    i = 0
+    for s in sparsity_levels:
+        if s == 0:
+            # duplicate the first case as baseline
+            set0 = all_pfs[:, :, sparsity_indices == s].copy()
+            set0 = np.concatenate((set0, set0), axis=2)
+            analyse_spatialcorr(aux, set0)
+        else:
+            analyse_spatialcorr(aux, all_pfs[:, :, sparsity_indices == s])
+
+        spatialcorr_per_sparsity[i] = load_string(aux['spatialcorr'])
+        spatialcorrshuff_per_sparsity[i] = load_string(aux['spatialcorrshuff'])
+        i += 1
+
+    point['spatialcorr_persparsity'] = tostore(spatialcorr_per_sparsity)
+    point['spatialcorrshuff_persparsity'] = tostore(spatialcorrshuff_per_sparsity)
+
+
+def analyse_spatialcorr_sparsecanon(point, all_pfs, sparsity_indices):
+
+    aux = {}
+    sparsity_levels = eval(point['sparsity_levels'])
+    spatialcorr_sparsecanon = np.zeros((len(sparsity_levels)))
+    spatialcorrshuff_sparsecanon = np.zeros((len(sparsity_levels)))
+    spatialcorr_sparsecanon_sem = np.zeros((len(sparsity_levels)))
+    spatialcorrshuff_sparsecanon_sem = np.zeros((len(sparsity_levels)))
+    load_string = lambda s: float(np.array(eval(s)[0]))
+    
+    canonical_set = all_pfs[:, :, sparsity_indices == 0.5].copy()
+    num_points = canonical_set.shape[0]
+
+    spatialcorr_sparsecanon_values = np.zeros((len(sparsity_levels), num_points))
+    spatialcorrshuff_sparsecanon_values = np.zeros((len(sparsity_levels), num_points))
+
+    # copy the case sparsity == 0 as any times as the canonical set
+    row0 = all_pfs[:, :, sparsity_indices == 0].copy()
+    all_pfsexp = np.concatenate((all_pfs, row0.repeat(canonical_set.shape[2]-1, axis=2)), axis=2)
+    sparsity_indices_exp = np.concatenate((sparsity_indices, np.zeros(canonical_set.shape[2]-1)), axis=0)
+
+    i = 0
+    for s in sparsity_levels:
+        num_points = np.sum(sparsity_indices_exp == s)
+        
+        for j in np.arange(canonical_set.shape[2]):
+            pair = np.concatenate((canonical_set[:,:,j:j+1], all_pfsexp[:, :, sparsity_indices_exp == s][:, :, j:j+1]), axis=2)
+            analyse_spatialcorr(aux, pair)
+            spatialcorr_sparsecanon[i] += load_string(aux['spatialcorr'])
+            spatialcorrshuff_sparsecanon[i] += load_string(aux['spatialcorrshuff'])
+            spatialcorr_sparsecanon_values[i,j] = load_string(aux['spatialcorr'])
+            spatialcorrshuff_sparsecanon_values[i,j] = load_string(aux['spatialcorrshuff'])
+
+
+        spatialcorr_sparsecanon[i] /= num_points
+        spatialcorrshuff_sparsecanon[i] /= num_points
+        spatialcorr_sparsecanon_sem[i] = np.std(spatialcorr_sparsecanon_values[i])/np.sqrt(num_points)
+        spatialcorrshuff_sparsecanon_sem[i] = np.std(spatialcorrshuff_sparsecanon_values[i])/np.sqrt(num_points)
+        i += 1
+
+    point['spatialcorr_sparsecanon'] = tostore(spatialcorr_sparsecanon)
+    point['spatialcorrshuff_sparsecanon'] = tostore(spatialcorrshuff_sparsecanon)
+    point['spatialcorr_sparsecanon_sem'] = tostore(spatialcorr_sparsecanon_sem)
+    point['spatialcorrshuff_sparsecanon_sem'] = tostore(spatialcorrshuff_sparsecanon_sem)
+    point['spatialcorr_sparsecanon_values'] = tostore(spatialcorr_sparsecanon_values)
+    point['spatialcorrshuff_sparsecanon_values'] = tostore(spatialcorrshuff_sparsecanon_values)
 
 def analyse_tagged_idx(set, point):
 
@@ -922,7 +1105,7 @@ if compute == 'ratemaps_pfs':
     df = compute_per_simulation(dbase, params, lambdafunc)
 elif compute == 'classes':
     lambdafunc = lambda x, gb: analyse_classes(x)
-    df = compute_across(dbase, ['arg_tagging_sparse','arg_current_amp','arg_tagged_idx'], params, lambdafunc)  
+    df = compute_across(dbase, ['arg_tagging_sparse','arg_tagging_seed', 'arg_current_amp','arg_tagged_idx'], params, lambdafunc)  
 
 # Making a new database
 elif compute == 'placecells':
@@ -931,7 +1114,7 @@ elif compute == 'placecells':
 elif compute == 'remapping':
     lambdafunc = lambda x, gb: analyse_remapping(x,gb)
     df = compute_across(dbase, ['arg_env'] if not args.null else 
-                        ['arg_tagging_sparse','arg_current_amp','arg_tagged_idx'], params, lambdafunc)
+                        ['arg_tagging_sparse','arg_tagging_seed', 'arg_current_amp','arg_tagged_idx'], params, lambdafunc)
 elif compute == 'recruitment':
     lambdafunc = lambda x, params: analyse_recruitment(x, params)
     df = compute_per_simulation(dbase, params, lambdafunc)

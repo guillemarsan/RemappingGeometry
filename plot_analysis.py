@@ -52,7 +52,7 @@ def compute_mesh_proj(D, tagged_idx):
     argmaxs = np.argmax(rates, axis=0)
     return mesh, argmaxs
 
-def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormalized=False, equal=False, flipxaxis=False, colorsvect=None):
+def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormalized=False, equal=False, flipxaxis=False, colorsvect=None, ticks=False):
 
     plt.figure(figsize=(4,4))
     ax = plt.gca()
@@ -61,19 +61,30 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
         c = plt.rcParams['axes.prop_cycle'].by_key()['color']
         i = 0
         ci = -1
+        ttest = np.any(data['legend'].str.contains('shuff'))
+        power = 0.05 / (len(data) - len(data[data['legend'].str.contains('identity')]))
         for _, point in data.iterrows():
             mean = point['mean']
             err = point['sem']
             xaxis = point['xaxis']
-            legend = point['legend'] if legends is None else legends[i]
+            legend = point['legend'] if legends is None else legends[i % len(legends)]
 
             if legend.endswith('shuff') or legend.endswith('(Shuffle)'):
-                plt.errorbar(xaxis, mean, err, marker='.', linestyle='--', capsize=3, label=legend, color=c[ci])
+                plt.errorbar(xaxis, mean, err, marker='.', linestyle='--', capsize=3, color=c[ci])
             else:
                 ci += 1
                 plt.errorbar(xaxis, mean, err, marker='.', capsize=3, label=legend, color=c[ci])
-                
+                if ttest:
+                    for j in np.arange(len(mean)):
+                        meanshuff = data.iloc[i+1]['mean'][j]
+                        values = point['values'][j]
+                        _, p_value = scipy.stats.ttest_1samp(values, meanshuff)
+                        if p_value < power:
+                            plt.scatter(xaxis[j], 1.08-(0.015*i), marker="*", color=c[ci])
             i += 1
+
+        if ticks:
+            plt.xticks(xaxis, xaxis)
 
     elif ptype == 'distr':
         c = plt.rcParams['axes.prop_cycle'].by_key()['color']
@@ -315,7 +326,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
 
         # nullspace proj
         if 'nproj_r' in point:
-            line_styles = ['-', '--', ':']
+            line_styles = ['-', '-.', '--', (0, (3, 5, 1, 5)), ':']
             nproj_r = point['nproj_r']
             shadow = np.min(nproj_r[2,:,:]) - 0.1
             for e in np.arange(nproj_r.shape[2]):
@@ -472,7 +483,7 @@ def make_plot(ptype, data, title, axis_labels, basepath, legends=None, ynormaliz
         plt.title(title, fontsize=10)
         plt.xlabel(axis_labels[0], fontsize=10)
         plt.ylabel(axis_labels[1], fontsize=10)
-        if ynormalized: plt.ylim(0,1.1)
+        if ynormalized: plt.ylim(0,0.5)
         if equal: plt.gca().set_aspect('equal')
         if flipxaxis: plt.gca().invert_xaxis()    
         plt.tick_params(axis='both', labelsize=10)
@@ -633,12 +644,14 @@ def prepare_pfs(df, neurons, visualize, labels, active=False):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simulation of one point")
-    parser.add_argument("--dir", type=str, default='gridcellsd1',
+    parser.add_argument("--dir", type=str, default='ED_redsweep',
                         help="Directory to read and write files")
-    parser.add_argument("--dir_loc", type=str, default='./v1',
+    parser.add_argument("--dir_loc", type=str, default='./data/testparam',
                         help="Location of the directory" )
-    parser.add_argument("--plot", type=str, default='vis',
+    parser.add_argument("--plot", type=str, default='nrooms',
                         help = 'Which plot to make')
+    parser.add_argument("--plot_case", type=str, default='',
+                        help = 'Which case to plot, within the plot type')
     
 
     args = parser.parse_args()
@@ -656,7 +669,7 @@ if plot in {'placefields'}:
     df = load_dataframe('database', basepath)
 elif plot in {'spatialinfo'}:
     df = load_dataframe('placecells', basepath)
-elif plot in {'remapping','nrooms', 'measures', 'variance_remap', 'dims_remap', 'dims_stats', 'multispatialcorr', 
+elif plot in {'remapping', 'nrooms', 'measures', 'variance_remap', 'redundancy_remap', 'dims_remap', 'sparsecanon_remap', 'dims_stats', 'multispatialcorr',
             'frdistance_pertuning', 'spatialcorr_pertuning', 'nrooms_pertuning', 'pca', 'remap_vec', 'vis'}:
     df = load_dataframe('remapping', basepath)
 else:
@@ -669,16 +682,24 @@ print ("Plotting results...")
 
 if plot == 'placefields':
 
-    dim_pcs = df.iloc[0]['arg_dim_pcs']
-    n_neurons = df.iloc[0]['arg_nb_neurons']
-    active = dim_pcs == 2
-    visualize = ['arg_path_type','arg_simulate']
-    labels = ['p', 's']
-    params_sweep = [('grid', 'minimization')]
-    tags = ['pfs']
+    if args.plot_case == '':
+        visualize = ['arg_path_type','arg_simulate']
+        labels = ['p', 's']
+        params_sweep = [('grid', 'minimization')]
+        tags = ['pfs']
+        n_neurons = df.iloc[0]['arg_nb_neurons']
+    else:
+        c = args.plot_case.split(',')
+        visualize = ['arg_dim_bbox', 'arg_nb_neurons']
+        labels = ['d', 'n']
+        params_sweep = [(eval(c[0]), eval(c[1]))]
+        tags = ['pfs']
+        n_neurons = eval(c[1])
+
     neurons = np.arange(n_neurons) #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     colorsvect = None #[1,1,1,1,1]]
-    
+    dim_pcs = df.iloc[0]['arg_dim_pcs']
+    active = dim_pcs == 2
 
     df = filter(df, visualize, params_sweep, tags)
     newdf = prepare_pfs(df, neurons, visualize, labels, active=active)
@@ -712,18 +733,28 @@ elif plot == 'spatialinfo':
 if plot == 'remapping' or plot == 'nrooms':
 
     visualize = ['arg_dim_bbox','arg_nb_neurons']
-    labels = ['d', 'n']
-    params_sweep = [(64,1024)]
-    tags = ['nrooms', 'nrooms_bins']
+    labels = ['d', 'redundancy']
+    params_sweep = [(d, n) for d in [16] for n in [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]]
+    tags = ['nrooms_per', 'nrooms_bins']
 
     fdf = filter(df, visualize, params_sweep, tags)
-    newdf = prepare_combine(fdf, across=True, data_label=['nrooms'], xaxis_label='nrooms_bins', labels=labels, visualize=visualize)
+
+    red = True
+    if red:
+        # compute redundancy
+        fdf['arg_nb_neurons'] = fdf['arg_nb_neurons'] / fdf['arg_dim_bbox']
+        fdf = fdf.drop(columns=['arg_dim_bbox'])
+        visualize.remove('arg_dim_bbox')
+        labels.remove('d')
+
+
+    newdf = prepare_combine(fdf, across=True, data_label=['nrooms_per'], xaxis_label='nrooms_bins', labels=labels, visualize=visualize)
 
     title = 'Percentage of neurons active in n rooms'
-    axis_labels = ['Number of rooms', 'Percentage of PCs']
+    axis_labels = ['Number of rooms', 'Percentage of neurons']
     print("Plotting results...")
     namea = name + '-' + 'nrooms'
-    make_plot('line', newdf, title, axis_labels, namea, ynormalized=False)
+    make_plot('line', newdf, title, axis_labels, namea, ynormalized=True)
 
 if plot == 'remapping' or plot == 'measures':
 
@@ -743,9 +774,86 @@ if plot == 'remapping' or plot == 'measures':
 
 if plot == 'remapping' or plot == 'variance_remap':
 
-    visualize = ['arg_encoding', 'arg_dim_bbox', 'arg_embedding_sigma']
-    labels = ['e', 'd', 's']
-    params_sweep = [('rotation',16,s) for s in [0, 0.1, 0.25, 0.5, 1]]
+    visualize = ['arg_dim_bbox', 'arg_embedding_sigma']
+    labels = ['d', 's']
+    params_sweep = [(d,s) for d in [8, 16, 32, 64] for s in [0.1, 0.2, 0.5, -1]]
+    tags = ['overlap', 'overlapshuff']
+
+    fdf = filter(df, visualize, params_sweep, tags)
+
+    # Xaxis variable
+    xaxis = 'arg_embedding_sigma'
+    xaxislabel = 's'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(fdf, across=False, data_label=tags, xaxis_label=xaxis, labels=labels, visualize=visualize)
+    
+    title = 'Environment dissimilarity'
+    axis_labels = ['Dissimilarity', 'Metric'] 
+    # legends = ['Overlap', 'Overlap (Shuffle)', 'Spatial correlation', 'Spatial correlation (Shuffle)']
+    print("Plotting results...")
+    namea = name + '-' + 'variance_remap'
+    make_plot('line', newdf, title, axis_labels, namea, legends=None, ynormalized=True)
+
+if plot == 'remapping' or plot == 'redundancy_remap':
+
+    if args.plot_case.startswith('ED'):
+        visualize = ['arg_model', 'arg_dim_bbox', 'arg_nb_neurons']
+        labels = ['m', 'd', 'r']
+        if args.plot_case.endswith('overlap'):
+            tags = ['overlap', 'overlapshuff']
+            metric = 'Overlap'
+            params_sweep = [(m, d, n) for d in [16, 32, 64, 128] for n in [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] for m in ['randclosed-load-polyae', 'identity']]
+        elif args.plot_case.endswith('spatialcorr'):
+            tags = ['spatialcorr', 'spatialcorrshuff']
+            metric = 'Spatial correlation'
+            params_sweep = [(m, d, n) for d in [16, 32, 64, 128] for n in [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] for m in ['randclosed-load-polyae', 'identity']]
+        elif args.plot_case.endswith('perpcs'):
+            tags = ['perpcs']
+            metric = 'Percentage of active place cells'
+            params_sweep = [(m, d, n) for d in [16, 32, 64, 128] for n in [16, 32, 64, 128, 256, 512, 1024, 2048, 4096] for m in ['randclosed-load-polyae']]
+        elif args.plot_case.endswith('meanperpfsizes'):
+            tags = ['meanperpfsizes']
+            metric = 'Mean place field size (%)'
+            params_sweep = [(m, d, n) for d in [16, 32, 64, 128] for n in [16, 32, 64, 128, 256, 512, 1024, 2048, 4096] for m in ['randclosed-load-polyae']]
+    else:
+        visualize = ['arg_dim_bbox', 'arg_nb_neurons', 'arg_embedding_sigma']
+        labels = ['dimensionality', 'r', 's']
+        params_sweep = [(d, n, s) for d in [8, 16, 32, 64] for n in [8, 16, 32, 64, 128, 256, 512, 1024] for s in [-1]]
+        if args.plot_case.endswith('overlap'):
+            tags = ['overlap', 'overlapshuff']
+            metric = 'Overlap'
+        else:
+            tags = ['spatialcorr', 'spatialcorrshuff']
+            metric = 'Spatial correlation'
+
+    fdf = filter(df, visualize, params_sweep, tags)
+    fdf['arg_nb_neurons'] = fdf['arg_nb_neurons'] / fdf['arg_dim_bbox']
+
+    # Xaxis variable
+    xaxis = 'arg_nb_neurons'
+    xaxislabel = 'r'
+    visualize.remove(xaxis)
+    labels.remove(xaxislabel)
+
+    newdf = prepare_combine(fdf, across=False, data_label=tags, xaxis_label=xaxis, labels=labels, visualize=visualize)
+
+    mask = newdf['legend'].str.contains('identity')
+    newdf.loc[newdf['legend'].str.contains('rand'), 'legend'] = newdf.loc[newdf['legend'].str.contains('rand'), 'legend'].apply(lambda x: x.replace('randclosed-load-polyae', ''))
+    newdf.loc[mask, 'xaxis'] = newdf.loc[mask, 'xaxis'].apply(lambda x: [-5]*len(x))
+
+    title = metric + " with redundancy (30 rooms)"
+    axis_labels = ['Redundancy', metric]
+    print("Plotting results...")
+    namea = name + '-' + 'red_remap'
+    make_plot('line', newdf, title, axis_labels, namea, legends=None, ynormalized=True)
+
+if plot == 'remapping' or plot == 'sparsity_remap':
+
+    visualize = ['arg_tagging_sparse']
+    labels = ['s']
+    params_sweep = [s for s in [0, 0.25, 0.5, 0.75, 1]]
     tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff']
 
     fdf = filter(df, visualize, params_sweep, tags)
@@ -760,19 +868,36 @@ if plot == 'remapping' or plot == 'variance_remap':
     
     title = 'Environment dissimilarity'
     axis_labels = ['Dissimilarity', 'Metric'] 
-    legends = ['Overlap', 'Overlap (Shuffle)', 'Spatial correlation', 'Spatial correlation (Shuffle)']
+    # legends = ['Overlap', 'Overlap (Shuffle)', 'Spatial correlation', 'Spatial correlation (Shuffle)']
     print("Plotting results...")
-    namea = name + '-' + 'variance_remap'
-    make_plot('line', newdf, title, axis_labels, namea, legends, ynormalized=True)
+    namea = name + '-' + 'sparsity_remap'
+    make_plot('line', newdf, title, axis_labels, namea, legends=None, ynormalized=True)
 
 if plot == 'remapping' or plot == 'dims_remap':
 
-    visualize = ['arg_dim_bbox', 'arg_embedding_sigma']
-    labels = ['d', 's']
-    params_sweep = [(d, -1) for d in [8, 16, 32, 64, 128]]
-    tags = ['overlap', 'overlapshuff', 'spatialcorr', 'spatialcorrshuff', 'overlapbin', 'overlapbinshuff']
+    # visualize = ['arg_dim_bbox', 'arg_nb_neurons', 'arg_model']
+    # labels = ['d', 'r', 'm']
+    # params_sweep = [(d, n, m) for d in [16, 32, 64, 128] for n in [16, 32, 64, 128, 256, 512, 1024] for m in ['randclosed-load-polyae', 'identity']]
+    visualize = ['arg_dim_bbox', 'arg_nb_neurons', 'arg_embedding_sigma']
+    labels = ['d', 'r', 'variance']
+    params_sweep = [(d, n, s) for d in [8, 16, 32, 64] for n in [16, 32, 64, 128, 256, 512, 1024] for s in [0.1, 0.2, 0.5, -1]]
+    if args.plot_case.endswith('overlap'):
+        tags = ['overlap', 'overlapshuff']
+        metric = 'Overlap'
+    else:
+        tags = ['spatialcorr', 'spatialcorrshuff']
+        metric = 'Spatial correlation'
 
+    
     fdf = filter(df, visualize, params_sweep, tags)
+    fdf.loc[fdf['arg_embedding_sigma'] == -1, 'arg_embedding_sigma'] = 1
+
+    red = True
+    if red:
+        red_filtered = 16
+        # compute redundancy
+        fdf['arg_nb_neurons'] = fdf['arg_nb_neurons'] / fdf['arg_dim_bbox']
+        fdf = fdf[fdf['arg_nb_neurons'] == red_filtered]
 
     # Xaxis variable
     xaxis = 'arg_dim_bbox'
@@ -781,13 +906,49 @@ if plot == 'remapping' or plot == 'dims_remap':
     labels.remove(xaxislabel)
 
     newdf = prepare_combine(fdf, across=False, data_label=tags, xaxis_label=xaxis, labels=labels, visualize=visualize)
+    # move the points with variance -1 to the end leaving the rest the same
+
     
-    title = 'Embedding space dimensionality'
-    axis_labels = ['Dimension', 'Metric'] 
-    legends = ['Overlap', 'Overlap (Shuffle)', 'Spatial correlation', 'Spatial correlation (Shuffle)', 'Binary Overlap','Binary Overlap (Shuffle)']
+    
+    title = metric + ' as a function of dimensionality (30 rooms)'
+    axis_labels = ['Dimension', metric] 
+    # legends = ['Overlap', 'Overlap (Shuffle)', 'Spatial correlation', 'Spatial correlation (Shuffle)']
     print("Plotting results...")
     namea = name + '-' + 'dims_remap'
-    make_plot('line', newdf, title, axis_labels, namea, legends, ynormalized=True)
+    make_plot('line', newdf, title, axis_labels, namea, legends=None, ynormalized=True)
+
+if plot == 'remapping' or plot == 'sparsecanon_remap':
+
+    visualize = ['arg_dim_bbox', 'sparsity_levels']
+    labels = ['d', 's']
+    params_sweep = [(16, '[0.  ,0.1 ,0.25,0.5 ,0.75,0.9 ]')]
+    if args.plot_case.endswith('overlap'):
+        tags = ['overlap_sparsecanon', 'overlap_sparsecanon_sem', 'overlap_sparsecanon_values',
+                'overlapshuff_sparsecanon', 'overlapshuff_sparsecanon_sem', 'overlapshuff_sparsecanon_values']
+        metric = 'Overlap'
+    elif args.plot_case.endswith('spatialcorr'):
+        tags = ['spatialcorr_sparsecanon', 'spatialcorr_sparsecanon_sem', 'spatialcorr_sparsecanon_values',
+                'spatialcorrshuff_sparsecanon', 'spatialcorrshuff_sparsecanon_sem', 'spatialcorrshuff_sparsecanon_values']
+        metric = 'Spatial correlation'
+
+    fdf = filter(df, visualize, params_sweep, tags)
+    newdf = pd.DataFrame([])
+    for i in range(0, len(tags), 3):
+        newpoint = {}
+        newpoint['mean'] = eval(fdf.iloc[0][tags[i]])
+        newpoint['sem'] = eval(fdf.iloc[0][tags[i+1]])
+        newpoint['values'] = eval(fdf.iloc[0][tags[i+2]])
+        newpoint['xaxis'] = eval(fdf.iloc[0]['sparsity_levels'])
+        newpoint['legend'] = tags[i].replace('_sparsecanon', '')
+
+        newdf = pd.concat([newdf, pd.DataFrame([newpoint])])
+
+    title = metric + ' against default number of neurons'
+    axis_labels = ['Percentage of neurons', metric] 
+    # legends = ['Overlap', 'Overlap (Shuffle)', 'Spatial correlation', 'Spatial correlation (Shuffle)']
+    print("Plotting results...")
+    namea = name + '-' + 'sparsecanon_remap'
+    make_plot('line', newdf, title, axis_labels, namea, legends=None, ynormalized=True, ticks=True)
 
 if plot == 'remapping' or plot == 'dims_stats':
 
